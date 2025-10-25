@@ -1,6 +1,4 @@
-
-
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { Expense, SavingsJar } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 
@@ -29,6 +27,10 @@ const RecurringIcon: React.FC = () => (
         <title>Gasto Recorrente</title>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 15M20 20l-1.5-1.5A9 9 0 003.5 9" />
     </svg>
+);
+
+const EditIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z" /></svg>
 );
 
 
@@ -73,28 +75,45 @@ export default function App() {
   const [jars, setJars] = useLocalStorage<SavingsJar[]>('jars', []);
   const [isExpenseModalOpen, setExpenseModalOpen] = useState(false);
   const [isJarModalOpen, setJarModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const calculateMonthlyExpenses = useCallback((date: Date) => {
     const targetMonthYear = getMonthYear(date);
-    return expenses.reduce((total, expense) => {
-      const expenseStartDate = new Date(expense.date + 'T00:00:00');
-      const expenseStartMonthYear = getMonthYear(expenseStartDate);
+    const CARD_CLOSING_DAY = 15;
 
+    return expenses.reduce((total, expense) => {
       if (expense.isRecurring) {
-        if (expenseStartMonthYear <= targetMonthYear) {
+        const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+        if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+        }
+        const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
+
+        if (effectiveStartMonthYear <= targetMonthYear) {
           return total + expense.amount;
         }
       } else if (expense.installments) {
+        const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+        if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+        }
+        
         const installmentAmount = expense.amount / expense.installments.total;
         for (let i = 0; i < expense.installments.total; i++) {
-          const installmentDate = new Date(expenseStartDate);
-          installmentDate.setMonth(expenseStartDate.getMonth() + i);
+          const installmentDate = new Date(effectiveStartDate);
+          installmentDate.setMonth(effectiveStartDate.getMonth() + i);
           if (getMonthYear(installmentDate) === targetMonthYear) {
             return total + installmentAmount;
           }
         }
       } else { // One-time expense
-        if (expenseStartMonthYear === targetMonthYear) {
+        const effectiveDate = new Date(expense.date + 'T00:00:00');
+        if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+        }
+        const effectiveMonthYear = getMonthYear(effectiveDate);
+
+        if (effectiveMonthYear === targetMonthYear) {
           return total + expense.amount;
         }
       }
@@ -117,6 +136,12 @@ export default function App() {
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     setExpenses([...expenses, { ...expense, id: Date.now().toString() }]);
     setExpenseModalOpen(false);
+  };
+
+  const updateExpense = (updatedExpense: Expense) => {
+    setExpenses(expenses.map(e => (e.id === updatedExpense.id ? updatedExpense : e)));
+    setExpenseModalOpen(false);
+    setEditingExpense(null);
   };
     
   const removeExpense = (id: string) => {
@@ -141,6 +166,22 @@ export default function App() {
   };
 
   const totalJarPercentage = jars.reduce((acc, jar) => acc + jar.percentage, 0);
+  
+  const handleStartAddExpense = () => {
+    setEditingExpense(null);
+    setExpenseModalOpen(true);
+  };
+  
+  const handleStartEditExpense = (expense: Expense) => {
+    setEditingExpense(expense);
+    setExpenseModalOpen(true);
+  };
+  
+  const handleCloseExpenseModal = () => {
+    setExpenseModalOpen(false);
+    setEditingExpense(null);
+  };
+
 
   return (
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
@@ -150,12 +191,18 @@ export default function App() {
         <Summary income={income} expenses={currentMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
         <FinancialChart income={income} expenses={currentMonthExpenses} surplus={surplus} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-            <ExpenseManager expenses={expenses} onAddExpense={() => setExpenseModalOpen(true)} onRemoveExpense={removeExpense} />
+            <ExpenseManager expenses={expenses} onAddExpense={handleStartAddExpense} onEditExpense={handleStartEditExpense} onRemoveExpense={removeExpense} />
             <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
         </div>
       </main>
       
-      <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setExpenseModalOpen(false)} onAddExpense={addExpense} />
+      <ExpenseModal 
+        isOpen={isExpenseModalOpen} 
+        onClose={handleCloseExpenseModal} 
+        onAddExpense={addExpense} 
+        onUpdateExpense={updateExpense}
+        expenseToEdit={editingExpense}
+      />
       <JarModal isOpen={isJarModalOpen} onClose={() => setJarModalOpen(false)} onAddJar={addJar} />
     </div>
   );
@@ -192,7 +239,7 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; onS
     const [newIncome, setNewIncome] = useState(income.toString());
 
     const handleIncomeSave = () => {
-        const value = parseFloat(newIncome);
+        const value = parseFloat(newIncome.replace(',', '.'));
         if(!isNaN(value)) {
             onSetIncome(value);
         }
@@ -308,26 +355,38 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
 };
 
 
-const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, onRemoveExpense: (id: string) => void }> = ({ expenses, onAddExpense, onRemoveExpense }) => {
+const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, onEditExpense: (expense: Expense) => void, onRemoveExpense: (id: string) => void }> = ({ expenses, onAddExpense, onEditExpense, onRemoveExpense }) => {
   const currentMonthExpenses = useMemo(() => {
     const today = new Date();
     const currentMonthKey = getMonthYear(today);
+    const CARD_CLOSING_DAY = 15;
     
     return expenses.filter(expense => {
-      const expenseStartDate = new Date(expense.date + 'T00:00:00');
-      const expenseStartMonthYear = getMonthYear(expenseStartDate);
-
       if (expense.isRecurring) {
-          return expenseStartMonthYear <= currentMonthKey;
+          const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+          if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+              effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+          }
+          const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
+          return effectiveStartMonthYear <= currentMonthKey;
       }
 
       if (expense.installments) {
-          const endDate = new Date(expenseStartDate);
-          endDate.setMonth(expenseStartDate.getMonth() + expense.installments.total - 1);
-          return today >= expenseStartDate && today <= endDate;
+          const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+           if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+              effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+          }
+          const endDate = new Date(effectiveStartDate);
+          endDate.setMonth(effectiveStartDate.getMonth() + expense.installments.total - 1);
+          return today >= effectiveStartDate && today <= endDate;
       }
       
-      return expenseStartMonthYear === currentMonthKey;
+      const effectiveDate = new Date(expense.date + 'T00:00:00');
+      if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+          effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+      }
+      const effectiveMonthYear = getMonthYear(effectiveDate);
+      return effectiveMonthYear === currentMonthKey;
     });
   }, [expenses]);
     
@@ -376,7 +435,10 @@ const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, 
                                     <p className="font-bold text-red-400 mr-4">
                                         {formatCurrency(exp.installments ? exp.amount / exp.installments.total : exp.amount)}
                                     </p>
-                                    <button onClick={() => onRemoveExpense(exp.id)} className="text-slate-500 hover:text-danger">
+                                    <button onClick={() => onEditExpense(exp)} className="text-slate-500 hover:text-accent p-1">
+                                        <EditIcon />
+                                    </button>
+                                    <button onClick={() => onRemoveExpense(exp.id)} className="text-slate-500 hover:text-danger p-1">
                                         <TrashIcon />
                                     </button>
                                 </div>
@@ -437,39 +499,25 @@ const SavingsManager: React.FC<{ jars: SavingsJar[], surplus: number, onAddJar: 
     );
 };
 
-const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpense: (expense: Omit<Expense, 'id'>) => void }> = ({ isOpen, onClose, onAddExpense }) => {
+const ExpenseModal: React.FC<{ 
+    isOpen: boolean, 
+    onClose: () => void, 
+    onAddExpense: (expense: Omit<Expense, 'id'>) => void,
+    onUpdateExpense: (expense: Expense) => void,
+    expenseToEdit: Expense | null
+}> = ({ isOpen, onClose, onAddExpense, onUpdateExpense, expenseToEdit }) => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    // FIX: Explicitly type the category state as `string`. The type was being inferred as the literal
-    // value of EXPENSE_CATEGORIES[0], which caused a type mismatch with the `string` value from the select's onChange event.
     const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
     const [isRecurring, setIsRecurring] = useState(false);
     const [isInstallment, setIsInstallment] = useState(false);
     const [installments, setInstallments] = useState('2');
     const [currentInstallment, setCurrentInstallment] = useState('1');
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const isEditing = !!expenseToEdit;
 
-        let firstPaymentDate = date;
-        if (isInstallment) {
-            const currentPaymentDate = new Date(date + 'T00:00:00');
-            currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (parseInt(currentInstallment, 10) - 1));
-            firstPaymentDate = currentPaymentDate.toISOString().split('T')[0];
-        }
-
-        const expenseData: Omit<Expense, 'id'> = {
-            description,
-            amount: parseFloat(amount),
-            date: firstPaymentDate,
-            category,
-            isRecurring: isRecurring && !isInstallment,
-            ...(isInstallment && { installments: { total: parseInt(installments, 10) } })
-        };
-        onAddExpense(expenseData);
-
-        // Reset form state
+    const resetForm = useCallback(() => {
         setDescription('');
         setAmount('');
         setDate(new Date().toISOString().split('T')[0]);
@@ -478,10 +526,61 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
         setIsInstallment(false);
         setInstallments('2');
         setCurrentInstallment('1');
+    }, []);
+
+    useEffect(() => {
+        if (expenseToEdit) {
+            setDescription(expenseToEdit.description);
+            setAmount(expenseToEdit.amount.toString().replace('.', ','));
+            setDate(expenseToEdit.date);
+            setCategory(expenseToEdit.category);
+            setIsRecurring(expenseToEdit.isRecurring);
+            const hasInstallments = !!expenseToEdit.installments;
+            setIsInstallment(hasInstallments);
+            if (hasInstallments) {
+                setInstallments(expenseToEdit.installments!.total.toString());
+            } else {
+                setInstallments('2');
+            }
+        } else {
+            resetForm();
+        }
+    }, [expenseToEdit, resetForm]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const numericAmount = parseFloat(amount.replace(',', '.'));
+        if (isNaN(numericAmount) || numericAmount <= 0) {
+            alert('Por favor, insira um valor válido.');
+            return;
+        }
+
+        let finalDate = date;
+        if (!isEditing && isInstallment) {
+            const currentPaymentDate = new Date(date + 'T00:00:00');
+            currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (parseInt(currentInstallment, 10) - 1));
+            finalDate = currentPaymentDate.toISOString().split('T')[0];
+        }
+
+        const expenseData = {
+            description,
+            amount: numericAmount,
+            date: finalDate,
+            category,
+            isRecurring: isRecurring && !isInstallment,
+            installments: isInstallment ? { total: parseInt(installments, 10) } : undefined
+        };
+
+        if (isEditing) {
+            onUpdateExpense({ ...expenseData, id: expenseToEdit.id });
+        } else {
+            onAddExpense(expenseData);
+        }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Adicionar Despesa">
+        <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Editar Despesa' : 'Adicionar Despesa'}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label className="block mb-1 font-semibold text-slate-300">Descrição</label>
@@ -489,10 +588,10 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
                 </div>
                 <div>
                     <label className="block mb-1 font-semibold text-slate-300">Valor Total</label>
-                    <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
                  <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? 'da Parcela Atual' : ''}</label>
+                    <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? (isEditing ? 'de Início' : 'da Parcela Atual') : ''}</label>
                     <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
                 <div>
@@ -512,18 +611,18 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
                     </div>
                 </div>
                 {isInstallment && (
-                    <>
-                        <div>
-                            <label className="block mb-1 font-semibold text-slate-300">Quantidade Total de Parcelas</label>
-                            <input type="number" min="2" value={installments} onChange={e => setInstallments(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                        </div>
-                        <div>
-                            <label className="block mb-1 font-semibold text-slate-300">Número da Parcela Atual</label>
-                            <input type="number" min="1" max={installments} value={currentInstallment} onChange={e => setCurrentInstallment(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                        </div>
-                    </>
+                    <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Quantidade Total de Parcelas</label>
+                        <input type="number" min="2" value={installments} onChange={e => setInstallments(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    </div>
                 )}
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">Adicionar</button>
+                {!isEditing && isInstallment && (
+                    <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Número da Parcela Atual</label>
+                        <input type="number" min="1" max={installments} value={currentInstallment} onChange={e => setCurrentInstallment(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    </div>
+                )}
+                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar'}</button>
             </form>
         </Modal>
     );
