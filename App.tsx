@@ -192,20 +192,9 @@ export default function App() {
     setDisplayedDate(current => {
       const newDate = new Date(current);
       newDate.setMonth(newDate.getMonth() + 1);
-      // Prevent going to the future
-      if (getMonthYear(newDate) > getMonthYear(new Date())) {
-        return current;
-      }
       return newDate;
     });
   }, []);
-
-  const isNextMonthDisabled = useMemo(() => {
-     const nextMonth = new Date(displayedDate);
-     nextMonth.setMonth(nextMonth.getMonth() + 1);
-     return getMonthYear(nextMonth) > getMonthYear(new Date());
-  }, [displayedDate]);
-
 
   const totalJarPercentage = jars.reduce((acc, jar) => acc + jar.percentage, 0);
   
@@ -241,7 +230,6 @@ export default function App() {
               onRemoveExpense={removeExpense}
               onPreviousMonth={goToPreviousMonth}
               onNextMonth={goToNextMonth}
-              isNextMonthDisabled={isNextMonthDisabled}
             />
             <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
         </div>
@@ -417,10 +405,9 @@ interface ExpenseManagerProps {
   onRemoveExpense: (id: string) => void;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
-  isNextMonthDisabled: boolean;
 }
 
-const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth, isNextMonthDisabled }) => {
+const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth }) => {
   const displayedMonthExpenses = useMemo(() => {
     const displayedMonthKey = getMonthYear(displayedDate);
     const CARD_CLOSING_DAY = 15;
@@ -471,7 +458,7 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                         <ChevronLeftIcon />
                     </button>
                     <span className="font-semibold text-lg text-slate-400 capitalize w-36 text-center">{monthYearDisplay}</span>
-                    <button onClick={onNextMonth} disabled={isNextMonthDisabled} className="p-2 rounded-full hover:bg-dark-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button onClick={onNextMonth} className="p-2 rounded-full hover:bg-dark-700 transition-colors">
                         <ChevronRightIcon />
                     </button>
                 </div>
