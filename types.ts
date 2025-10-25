@@ -4,6 +4,7 @@ export interface Expense {
   amount: number;
   date: string; // Start date for recurring/installments, transaction date for one-time
   category: string;
+  subcategory?: string;
   isRecurring: boolean;
   installments?: {
     total: number;

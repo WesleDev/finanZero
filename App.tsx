@@ -41,13 +41,22 @@ const ChevronRightIcon: React.FC = () => (
 // --- UTILS & CONSTANTS ---
 const EXPENSE_CATEGORIES = ['Cartão de Crédito', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros'] as const;
 
+const SUBCATEGORIES: Record<string, string[]> = {
+  'Cartão de Crédito': ['Streaming', 'Roupas', 'Lazer', 'Supermercado', 'Outros'],
+  'Alimentação': ['Supermercado', 'Restaurante', 'Delivery', 'Outros'],
+  'Moradia': ['Aluguel', 'Condomínio', 'Contas (Água, Luz, etc.)', 'Manutenção', 'Outros'],
+  'Transporte': ['Combustível', 'Transporte Público', 'App de Transporte', 'Manutenção', 'Outros'],
+  'Lazer': ['Cinema', 'Viagem', 'Hobbies', 'Outros'],
+  'Saúde': ['Farmácia', 'Consulta', 'Plano de Saúde', 'Outros'],
+  'Educação': ['Curso', 'Livros', 'Mensalidade', 'Outros'],
+};
+
 const formatCurrency = (value: number) => {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
 const parseCurrencyInput = (value: string): number => {
     if (typeof value !== 'string' || value.trim() === '') return 0;
-    // Normalize the string: remove thousand separators (.) and then replace the decimal comma (,) with a dot (.).
     const sanitizedValue = value.replace(/\./g, '').replace(',', '.');
     const numericValue = parseFloat(sanitizedValue);
     return isNaN(numericValue) ? 0 : numericValue;
@@ -108,7 +117,6 @@ export default function App() {
         }
       } else if (expense.installments) {
         const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-        // Card closing logic for installments should apply to the start date
         const firstPaymentDate = new Date(effectiveStartDate);
          if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
             firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
@@ -147,6 +155,46 @@ export default function App() {
     const surplus = income - displayedMonthExpenses;
     return { displayedMonthExpenses, previousMonthExpenses, surplus };
   }, [income, calculateMonthlyExpenses, displayedDate]);
+
+  const displayedMonthExpensesList = useMemo(() => {
+    const displayedMonthKey = getMonthYear(displayedDate);
+    const CARD_CLOSING_DAY = 15;
+    
+    return expenses.filter(expense => {
+      if (expense.isRecurring) {
+          const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+          if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+              effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+          }
+          const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
+          return effectiveStartMonthYear <= displayedMonthKey;
+      }
+
+      if (expense.installments) {
+          const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+          const firstPaymentDate = new Date(effectiveStartDate);
+          if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+              firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+          }
+          for (let i = 0; i < expense.installments.total; i++) {
+            const installmentDate = new Date(firstPaymentDate);
+            installmentDate.setMonth(firstPaymentDate.getMonth() + i);
+            if (getMonthYear(installmentDate) === displayedMonthKey) {
+                return true;
+            }
+          }
+          return false;
+      }
+      
+      const effectiveDate = new Date(expense.date + 'T00:00:00');
+      if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+          effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+      }
+      const effectiveMonthYear = getMonthYear(effectiveDate);
+      return effectiveMonthYear === displayedMonthKey;
+    });
+  }, [expenses, displayedDate]);
+
 
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     setExpenses([...expenses, { ...expense, id: Date.now().toString() }]);
@@ -220,10 +268,10 @@ export default function App() {
         <Header />
         <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
         <Summary income={income} expenses={displayedMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
-        <FinancialChart income={income} expenses={displayedMonthExpenses} surplus={surplus} />
+        <FinancialChart income={income} expenses={displayedMonthExpenses} surplus={surplus} monthlyExpensesList={displayedMonthExpensesList} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
             <ExpenseManager 
-              expenses={expenses} 
+              expenses={displayedMonthExpensesList} 
               displayedDate={displayedDate}
               onAddExpense={handleStartAddExpense} 
               onEditExpense={handleStartEditExpense} 
@@ -313,7 +361,43 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; onS
     );
 };
 
-const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; }> = ({ income, expenses, surplus }) => {
+const SubcategoryRanking: React.FC<{ expenses: Expense[] }> = ({ expenses }) => {
+    const rankedExpenses = useMemo(() => {
+        const expensesBySubcategory: { [key: string]: number } = {};
+        
+        expenses.forEach(expense => {
+            if (expense.subcategory) {
+                const monthlyAmount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
+                expensesBySubcategory[expense.subcategory] = (expensesBySubcategory[expense.subcategory] || 0) + monthlyAmount;
+            }
+        });
+        
+        return Object.entries(expensesBySubcategory)
+            .sort(([, amountA], [, amountB]) => amountB - amountA)
+            .slice(0, 5);
+    }, [expenses]);
+    
+    if (rankedExpenses.length === 0) {
+        return <p className="text-slate-500 text-center md:text-left mt-6">Nenhum gasto com subcategoria para exibir no ranking.</p>;
+    }
+
+    return (
+        <div className="mt-6">
+            <h3 className="text-lg font-bold text-slate-300 mb-2">Top Gastos por Subcategoria</h3>
+            <ul className="space-y-2">
+                {rankedExpenses.map(([subcategory, total]) => (
+                    <li key={subcategory} className="flex justify-between items-center text-sm">
+                        <span className="text-slate-400">{subcategory}</span>
+                        <span className="font-bold text-slate-200">{formatCurrency(total)}</span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
+
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[] }> = ({ income, expenses, surplus, monthlyExpensesList }) => {
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
@@ -334,63 +418,35 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
 
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8">
-            <h2 className="text-2xl font-bold text-slate-100 mb-4 text-center">Distribuição Mensal</h2>
-            <div className="flex flex-col md:flex-row items-center justify-center gap-8">
-                <div className="relative w-52 h-52">
+            <h2 className="text-2xl font-bold text-slate-100 mb-4 text-center">Visão Geral do Mês</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div className="relative w-52 h-52 mx-auto">
                     <svg className="w-full h-full" viewBox="0 0 200 200">
-                        {/* Center Text */}
-                        <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">
-                            Receita Total
-                        </text>
-                        <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">
-                            {formatCurrency(income)}
-                        </text>
-
-                        {/* Chart Rings */}
-                        <circle
-                            cx="100" cy="100" r={radius}
-                            fill="transparent"
-                            strokeWidth="20"
-                            className="text-red-500/20 stroke-current"
-                        />
-                        <circle
-                             cx="100" cy="100" r={radius}
-                             fill="transparent"
-                             strokeWidth="20"
-                             strokeDasharray={circumference}
-                             strokeDashoffset={expenseStrokeDashoffset}
-                             strokeLinecap="round"
-                             transform="rotate(-90 100 100)"
-                             className="text-red-500 stroke-current"
-                        />
-                       
-                         {surplus > 0 && <circle
-                             cx="100" cy="100" r={radius}
-                             fill="transparent"
-                             strokeWidth="20"
-                             strokeDasharray={circumference}
-                             strokeDashoffset={circumference - (surplusPercentage / 100) * circumference}
-                             strokeLinecap="round"
-                             transform={`rotate(${expenseRotation - 90} 100 100)`}
-                             className="text-blue-500 stroke-current"
-                        />}
+                        <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
+                        <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income)}</text>
+                        <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-red-500/20 stroke-current" />
+                        <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" strokeDasharray={circumference} strokeDashoffset={expenseStrokeDashoffset} strokeLinecap="round" transform="rotate(-90 100 100)" className="text-red-500 stroke-current" />
+                        {surplus > 0 && <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" strokeDasharray={circumference} strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} strokeLinecap="round" transform={`rotate(${expenseRotation - 90} 100 100)`} className="text-blue-500 stroke-current" />}
                     </svg>
                 </div>
-                <div className="space-y-4">
-                    <div className="flex items-center">
-                        <div className="w-4 h-4 rounded-full bg-red-500 mr-3"></div>
-                        <div>
-                            <p className="text-slate-400">Despesas</p>
-                            <p className="font-bold text-lg text-red-400">{formatCurrency(expenses)}</p>
+                <div>
+                    <div className="space-y-4">
+                        <div className="flex items-center">
+                            <div className="w-4 h-4 rounded-full bg-red-500 mr-3"></div>
+                            <div>
+                                <p className="text-slate-400">Despesas</p>
+                                <p className="font-bold text-lg text-red-400">{formatCurrency(expenses)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center">
+                            <div className="w-4 h-4 rounded-full bg-blue-500 mr-3"></div>
+                            <div>
+                                <p className="text-slate-400">Sobra</p>
+                                <p className="font-bold text-lg text-blue-400">{formatCurrency(surplus)}</p>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center">
-                        <div className="w-4 h-4 rounded-full bg-blue-500 mr-3"></div>
-                        <div>
-                            <p className="text-slate-400">Sobra</p>
-                            <p className="font-bold text-lg text-blue-400">{formatCurrency(surplus)}</p>
-                        </div>
-                    </div>
+                    <SubcategoryRanking expenses={monthlyExpensesList} />
                 </div>
             </div>
         </div>
@@ -408,45 +464,6 @@ interface ExpenseManagerProps {
 }
 
 const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth }) => {
-  const displayedMonthExpenses = useMemo(() => {
-    const displayedMonthKey = getMonthYear(displayedDate);
-    const CARD_CLOSING_DAY = 15;
-    
-    return expenses.filter(expense => {
-      if (expense.isRecurring) {
-          const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-          if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
-              effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
-          }
-          const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
-          return effectiveStartMonthYear <= displayedMonthKey;
-      }
-
-      if (expense.installments) {
-          const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-          const firstPaymentDate = new Date(effectiveStartDate);
-          if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-              firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
-          }
-          for (let i = 0; i < expense.installments.total; i++) {
-            const installmentDate = new Date(firstPaymentDate);
-            installmentDate.setMonth(firstPaymentDate.getMonth() + i);
-            if (getMonthYear(installmentDate) === displayedMonthKey) {
-                return true;
-            }
-          }
-          return false;
-      }
-      
-      const effectiveDate = new Date(expense.date + 'T00:00:00');
-      if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
-          effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-      }
-      const effectiveMonthYear = getMonthYear(effectiveDate);
-      return effectiveMonthYear === displayedMonthKey;
-    });
-  }, [expenses, displayedDate]);
-
   const monthYearDisplay = displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     
   return (
@@ -467,21 +484,18 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                 </button>
             </div>
             <div className="flex-grow overflow-y-auto max-h-96 pr-2">
-            {displayedMonthExpenses.length === 0 ? (
+            {expenses.length === 0 ? (
                 <p className="text-slate-400 text-center py-10">Nenhuma despesa este mês.</p>
             ) : (
                 <ul className="space-y-3">
-                    {displayedMonthExpenses.map(exp => {
+                    {expenses.map(exp => {
                         let currentInstallment = 0;
                         if(exp.installments){
                             const CARD_CLOSING_DAY = 15;
-                            // Calculate the actual first payment date, considering the card closing day
                             const firstPaymentDate = new Date(exp.date + 'T00:00:00');
                             if (exp.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
                                 firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
                             }
-                            
-                            // Calculate the difference in months from the first payment date
                             const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
                             currentInstallment = monthsDiff + 1;
                         }
@@ -494,7 +508,9 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                                         {exp.isRecurring && <RecurringIcon />}
                                     </div>
                                     <div className="text-sm text-slate-400 flex items-center gap-4">
-                                        <span className="bg-dark-600 px-2 py-0.5 rounded-full text-xs font-medium">{exp.category}</span>
+                                        <span className="bg-dark-600 px-2 py-0.5 rounded-full text-xs font-medium">
+                                            {exp.category} {exp.subcategory ? `> ${exp.subcategory}` : ''}
+                                        </span>
                                         {exp.installments && (
                                             <div className="flex-grow">
                                                 <span>Parcela {currentInstallment}/{exp.installments.total}</span>
@@ -584,18 +600,21 @@ const ExpenseModal: React.FC<{
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+    const [subcategory, setSubcategory] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
     const [isInstallment, setIsInstallment] = useState(false);
     const [installments, setInstallments] = useState('2');
     const [currentInstallment, setCurrentInstallment] = useState('1');
 
     const isEditing = !!expenseToEdit;
+    const availableSubcategories = SUBCATEGORIES[category as keyof typeof SUBCATEGORIES];
 
     const resetForm = useCallback(() => {
         setDescription('');
         setAmount('');
         setDate(new Date().toISOString().split('T')[0]);
         setCategory(EXPENSE_CATEGORIES[0]);
+        setSubcategory(SUBCATEGORIES[EXPENSE_CATEGORIES[0] as keyof typeof SUBCATEGORIES]?.[0] || '');
         setIsRecurring(false);
         setIsInstallment(false);
         setInstallments('2');
@@ -603,19 +622,24 @@ const ExpenseModal: React.FC<{
     }, []);
 
     useEffect(() => {
+      if (!isEditing && category) {
+        setSubcategory(SUBCATEGORIES[category as keyof typeof SUBCATEGORIES]?.[0] || '');
+      }
+    }, [category, isEditing]);
+
+    useEffect(() => {
         if (expenseToEdit) {
             setDescription(expenseToEdit.description);
             setAmount(expenseToEdit.amount.toString().replace('.', ','));
             setDate(expenseToEdit.date);
             setCategory(expenseToEdit.category);
+            setSubcategory(expenseToEdit.subcategory || '');
             setIsRecurring(expenseToEdit.isRecurring);
             const hasInstallments = !!expenseToEdit.installments;
             setIsInstallment(hasInstallments);
             if (hasInstallments) {
                 setInstallments(expenseToEdit.installments!.total.toString());
-                 // Logic to determine current installment when editing is complex,
-                 // so we won't try to auto-populate it for now.
-                 setCurrentInstallment('1'); 
+                setCurrentInstallment('1'); 
             } else {
                 setInstallments('2');
             }
@@ -638,8 +662,6 @@ const ExpenseModal: React.FC<{
             const currentPaymentDate = new Date(date + 'T00:00:00');
             const currentInstallmentNum = parseInt(currentInstallment, 10);
             
-            // Only adjust the start date if it's a new expense.
-            // When editing, we assume the original start date is correct.
             if (!isEditing && currentInstallmentNum > 1) {
               currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (currentInstallmentNum - 1));
             }
@@ -651,6 +673,7 @@ const ExpenseModal: React.FC<{
             amount: numericAmount,
             date: finalDate,
             category,
+            subcategory: availableSubcategories ? subcategory : undefined,
             isRecurring: isRecurring && !isInstallment,
             installments: isInstallment ? { total: parseInt(installments, 10) } : undefined
         };
@@ -677,11 +700,21 @@ const ExpenseModal: React.FC<{
                     <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? (isEditing ? 'de Início da Compra' : 'do Pagamento Atual') : 'da Despesa'}</label>
                     <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
-                <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Categoria</label>
-                    <select value={category} onChange={e => setCategory(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
-                        {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Categoria</label>
+                        <select value={category} onChange={e => setCategory(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
+                            {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                    </div>
+                     {availableSubcategories && availableSubcategories.length > 0 && (
+                        <div>
+                            <label className="block mb-1 font-semibold text-slate-300">Subcategoria</label>
+                            <select value={subcategory} onChange={e => setSubcategory(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
+                                {availableSubcategories.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                            </select>
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center">
