@@ -36,6 +36,17 @@ const ChevronLeftIcon: React.FC = () => (
 const ChevronRightIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
 );
+const CurrencyDollarIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01M12 6v-1m0-1V4m0 2.01M12 18v-1m0-1v-1m0 0v-1m0 0V9.99M12 18h.01M12 21a9 9 0 110-18 9 9 0 010 18z" />
+  </svg>
+);
+const ChartPieIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+  </svg>
+);
 
 // --- UTILS & CONSTANTS ---
 const EXPENSE_CATEGORIES = ['Cartão de Crédito', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros'] as const;
@@ -105,6 +116,8 @@ export default function App() {
 
   const [displayedDate, setDisplayedDate] = useState(new Date());
   
+  const [activeTab, setActiveTab] = useState('dashboard');
+
   const totalIncome = useMemo(() => incomes.reduce((acc, inc) => acc + inc.amount, 0), [incomes]);
 
   const calculateMonthlyExpenses = useCallback((date: Date) => {
@@ -305,37 +318,54 @@ export default function App() {
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
       <main className="container mx-auto p-4 md:p-8">
         <Header />
-        <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
-        <Summary income={totalIncome} expenses={displayedMonthExpenses} surplus={surplus} />
-        <FinancialChart 
-            income={totalIncome} 
-            expenses={displayedMonthExpenses} 
-            surplus={surplus} 
-            monthlyExpensesList={displayedMonthExpensesList}
-            displayedDate={displayedDate}
-        />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-            <div>
-                 <IncomeManager 
-                    incomes={incomes}
-                    onAddIncome={handleStartAddIncome}
-                    onEditIncome={handleStartEditIncome}
-                    onRemoveIncome={removeIncome}
-                 />
-                 <div className="mt-8">
-                    <ExpenseManager 
-                      expenses={displayedMonthExpensesList} 
-                      displayedDate={displayedDate}
-                      onAddExpense={handleStartAddExpense} 
-                      onEditExpense={handleStartEditExpense} 
-                      onRemoveExpense={removeExpense}
-                      onPreviousMonth={goToPreviousMonth}
-                      onNextMonth={goToNextMonth}
-                    />
-                 </div>
+        <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+        
+        {activeTab === 'dashboard' && (
+          <div id="dashboard-content">
+            <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
+            <Summary income={totalIncome} expenses={displayedMonthExpenses} surplus={surplus} />
+            <FinancialChart 
+                income={totalIncome} 
+                expenses={displayedMonthExpenses} 
+                surplus={surplus} 
+                monthlyExpensesList={displayedMonthExpensesList}
+                displayedDate={displayedDate}
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+                <div>
+                     <IncomeManager 
+                        incomes={incomes}
+                        onAddIncome={handleStartAddIncome}
+                        onEditIncome={handleStartEditIncome}
+                        onRemoveIncome={removeIncome}
+                     />
+                     <div className="mt-8">
+                        <ExpenseManager 
+                          expenses={displayedMonthExpensesList} 
+                          displayedDate={displayedDate}
+                          onAddExpense={handleStartAddExpense} 
+                          onEditExpense={handleStartEditExpense} 
+                          onRemoveExpense={removeExpense}
+                          onPreviousMonth={goToPreviousMonth}
+                          onNextMonth={goToNextMonth}
+                        />
+                     </div>
+                </div>
+                <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
             </div>
-            <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
-        </div>
+          </div>
+        )}
+
+        {activeTab === 'investments' && (
+          <InvestmentsPage
+            jars={jars}
+            onUpdateJar={updateJarPercentage}
+            onRemoveJar={removeJar}
+            onAddJar={() => setJarModalOpen(true)}
+            totalPercentage={totalJarPercentage}
+            expensesForMonth={displayedMonthExpensesList}
+          />
+        )}
       </main>
       
       <IncomeModal
@@ -366,6 +396,130 @@ const Header: React.FC = () => (
         <p className="text-slate-400 mt-2">Seu painel de controle financeiro pessoal.</p>
     </header>
 );
+
+const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) => void}> = ({ activeTab, setActiveTab }) => {
+  const tabs = [
+    { id: 'dashboard', name: 'Painel Principal', icon: <ChartPieIcon className="h-5 w-5 mr-2"/> },
+    { id: 'investments', name: 'Investimentos', icon: <CurrencyDollarIcon className="h-5 w-5 mr-2"/> },
+  ];
+
+  return (
+    <div className="mb-8 border-b border-dark-700">
+      <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`${
+              activeTab === tab.id
+                ? 'border-accent text-accent'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors`}
+          >
+            {tab.icon}
+            {tab.name}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+};
+
+const InvestmentsPage: React.FC<{
+  jars: SavingsJar[],
+  onUpdateJar: (id: string, p: number) => void,
+  onRemoveJar: (id: string) => void,
+  onAddJar: () => void,
+  totalPercentage: number,
+  expensesForMonth: Expense[]
+}> = ({ jars, onUpdateJar, onRemoveJar, onAddJar, totalPercentage, expensesForMonth }) => {
+    
+    const [fortnightlyIncome, setFortnightlyIncome] = useLocalStorage<number>('fortnightlyIncome', 0);
+    const [monthlyPayment, setMonthlyPayment] = useLocalStorage<number>('monthlyPayment', 0);
+    
+    const [fortnightlyIncomeInput, setFortnightlyIncomeInput] = useState(fortnightlyIncome > 0 ? fortnightlyIncome.toString().replace('.', ',') : '');
+    const [monthlyPaymentInput, setMonthlyPaymentInput] = useState(monthlyPayment > 0 ? monthlyPayment.toString().replace('.', ',') : '');
+
+    const creditCardExpenses = useMemo(() => {
+        return expensesForMonth
+            .filter(exp => exp.category === 'Cartão de Crédito')
+            .reduce((acc, exp) => acc + (exp.installments ? exp.amount / exp.installments.total : exp.amount), 0);
+    }, [expensesForMonth]);
+
+    const midMonthSurplus = fortnightlyIncome - creditCardExpenses;
+
+    const handleFortnightlyIncomeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setFortnightlyIncomeInput(value);
+        const parsedValue = parseCurrencyInput(value);
+        if (!isNaN(parsedValue)) {
+            setFortnightlyIncome(parsedValue);
+        }
+    };
+
+    const handleMonthlyPaymentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setMonthlyPaymentInput(value);
+        const parsedValue = parseCurrencyInput(value);
+        if (!isNaN(parsedValue)) {
+            setMonthlyPayment(parsedValue);
+        }
+    };
+
+    return (
+        <div className="mt-2 grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+            <div className="lg:col-span-3 space-y-8">
+                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Configurar Ganhos para Investimento</h2>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block mb-1 font-semibold text-slate-300">Receita Quinzenal (adiantamento)</label>
+                            <input type="text" inputMode="decimal" value={fortnightlyIncomeInput} onChange={handleFortnightlyIncomeChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="R$ 0,00" />
+                        </div>
+                        <div>
+                            <label className="block mb-1 font-semibold text-slate-300">Pagamento Fim de Mês (salário)</label>
+                            <input type="text" inputMode="decimal" value={monthlyPaymentInput} onChange={handleMonthlyPaymentChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="R$ 0,00" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Quinzenal (Dia 15)</h2>
+                    <div className="space-y-2 text-lg mb-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Receita Quinzenal:</span>
+                            <span className="font-bold text-green-400">{formatCurrency(fortnightlyIncome)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Despesas do Cartão:</span>
+                            <span className="font-bold text-red-400">- {formatCurrency(creditCardExpenses)}</span>
+                        </div>
+                        <hr className="border-dark-700 !my-3"/>
+                        <div className="flex justify-between items-center text-xl">
+                            <span className="text-slate-200">Saldo para investir:</span>
+                            <span className={`font-extrabold ${midMonthSurplus >= 0 ? 'text-blue-400' : 'text-yellow-400'}`}>{formatCurrency(midMonthSurplus)}</span>
+                        </div>
+                    </div>
+                    <hr className="border-dark-600 mb-4"/>
+                     <p className="text-slate-400 mb-4 text-center">Distribua o saldo para investir nas suas caixinhas:</p>
+                    <SavingsManager jars={jars} surplus={midMonthSurplus} onAddJar={onAddJar} onUpdateJar={onUpdateJar} onRemoveJar={onRemoveJar} totalPercentage={totalPercentage} />
+                </div>
+            </div>
+
+            <div className="lg:col-span-2">
+                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Fim de Mês</h2>
+                     <div className="flex justify-between items-center text-xl">
+                        <span className="text-slate-200">Aporte sugerido:</span>
+                        <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment)}</span>
+                    </div>
+                    <p className="text-slate-500 mt-2 text-sm">Este é o valor que você configurou como seu pagamento de fim de mês.</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const MonthlyAlert: React.FC<{ current: number; previous: number }> = ({ current, previous }) => {
     if (previous === 0 && current > 0) {
