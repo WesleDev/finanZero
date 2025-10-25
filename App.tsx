@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 
@@ -46,6 +46,16 @@ const ChartPieIcon: React.FC<{ className?: string }> = ({ className }) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
     <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
   </svg>
+);
+const UploadIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>
+);
+const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
 );
 
 // --- UTILS & CONSTANTS ---
@@ -105,6 +115,12 @@ export default function App() {
   const [incomes, setIncomes] = useLocalStorage<Income[]>('incomes', []);
   const [expenses, setExpenses] = useLocalStorage<Expense[]>('expenses', []);
   const [jars, setJars] = useLocalStorage<SavingsJar[]>('jars', []);
+  const [fortnightlyIncome, setFortnightlyIncome] = useLocalStorage<number>('fortnightlyIncome', 0);
+  const [monthlyPayment, setMonthlyPayment] = useLocalStorage<number>('monthlyPayment', 0);
+  const [midMonthPercentages, setMidMonthPercentages] = useLocalStorage<Record<string, number>>('midMonthPercentages', {});
+  const [endOfMonthPercentages, setEndOfMonthPercentages] = useLocalStorage<Record<string, number>>('endOfMonthPercentages', {});
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isIncomeModalOpen, setIncomeModalOpen] = useState(false);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
@@ -324,10 +340,72 @@ export default function App() {
     }, {} as Record<string, number>);
   }, [jars]);
 
+  // --- DATA IMPORT/EXPORT ---
+  const handleExport = () => {
+    const appData = {
+      incomes,
+      expenses,
+      jars,
+      fortnightlyIncome,
+      monthlyPayment,
+      midMonthPercentages,
+      endOfMonthPercentages,
+    };
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(appData, null, 2))}`;
+    const link = document.createElement("a");
+    link.href = jsonString;
+    const date = new Date().toISOString().split('T')[0];
+    link.download = `finanzero-backup-${date}.json`;
+    link.click();
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const text = e.target?.result;
+            if (typeof text !== 'string') {
+                throw new Error("File content is not a string");
+            }
+            const data = JSON.parse(text);
+
+            // Basic validation
+            if (!data.incomes || !data.expenses || !data.jars || data.fortnightlyIncome === undefined) {
+                throw new Error("Arquivo de backup inválido ou corrompido.");
+            }
+            
+            if (window.confirm("Tem certeza que deseja importar os dados? Todos os dados atuais serão substituídos.")) {
+                setIncomes(data.incomes);
+                setExpenses(data.expenses);
+                setJars(data.jars);
+                setFortnightlyIncome(data.fortnightlyIncome);
+                setMonthlyPayment(data.monthlyPayment);
+                setMidMonthPercentages(data.midMonthPercentages);
+                setEndOfMonthPercentages(data.endOfMonthPercentages);
+                alert("Dados importados com sucesso!");
+            }
+        } catch (error) {
+            console.error("Erro ao importar dados:", error);
+            alert(`Erro ao importar dados: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            // Reset file input to allow re-uploading the same file
+            if(event.target) event.target.value = '';
+        }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
       <main className="container mx-auto p-4 md:p-8">
-        <Header />
+        <Header onImport={handleImportClick} onExport={handleExport} />
         <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
         
         {activeTab === 'dashboard' && (
@@ -379,6 +457,14 @@ export default function App() {
             onRemoveJar={removeJar}
             onAddJar={() => setJarModalOpen(true)}
             expensesForMonth={displayedMonthExpensesList}
+            fortnightlyIncome={fortnightlyIncome}
+            setFortnightlyIncome={setFortnightlyIncome}
+            monthlyPayment={monthlyPayment}
+            setMonthlyPayment={setMonthlyPayment}
+            midMonthPercentages={midMonthPercentages}
+            setMidMonthPercentages={setMidMonthPercentages}
+            endOfMonthPercentages={endOfMonthPercentages}
+            setEndOfMonthPercentages={setEndOfMonthPercentages}
           />
         )}
       </main>
@@ -398,16 +484,38 @@ export default function App() {
         expenseToEdit={editingExpense}
       />
       <JarModal isOpen={isJarModalOpen} onClose={() => setJarModalOpen(false)} onAddJar={addJar} />
+      <input 
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept="application/json"
+      />
     </div>
   );
 }
 
 // --- SUB-COMPONENTS ---
-const Header: React.FC = () => (
+const Header: React.FC<{onImport: () => void, onExport: () => void}> = ({ onImport, onExport }) => (
     <header className="mb-8">
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600 flex items-center gap-3">
-            <WalletIcon /> FinanZero
-        </h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+                <WalletIcon />
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600">
+                    FinanZero
+                </h1>
+            </div>
+            <div className="flex items-center gap-2">
+                 <button onClick={onImport} className="flex items-center bg-dark-700 hover:bg-dark-600 text-slate-300 font-bold py-2 px-3 rounded-lg transition-colors">
+                    <UploadIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline ml-2">Importar</span>
+                </button>
+                 <button onClick={onExport} className="flex items-center bg-dark-700 hover:bg-dark-600 text-slate-300 font-bold py-2 px-3 rounded-lg transition-colors">
+                    <DownloadIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline ml-2">Exportar</span>
+                </button>
+            </div>
+        </div>
         <p className="text-slate-400 mt-2">Seu painel de controle financeiro pessoal.</p>
     </header>
 );
@@ -499,21 +607,39 @@ const InvestmentReport: React.FC<InvestmentReportProps> = ({
     );
 };
 
-const InvestmentsPage: React.FC<{
-  jars: Omit<SavingsJar, 'percentage'>[],
-  onRemoveJar: (id: string) => void,
-  onAddJar: () => void,
-  expensesForMonth: Expense[]
-}> = ({ jars, onRemoveJar, onAddJar, expensesForMonth }) => {
-    
-    const [fortnightlyIncome, setFortnightlyIncome] = useLocalStorage<number>('fortnightlyIncome', 0);
-    const [monthlyPayment, setMonthlyPayment] = useLocalStorage<number>('monthlyPayment', 0);
+interface InvestmentsPageProps {
+  jars: Omit<SavingsJar, 'percentage'>[];
+  onRemoveJar: (id: string) => void;
+  onAddJar: () => void;
+  expensesForMonth: Expense[];
+  fortnightlyIncome: number;
+  setFortnightlyIncome: (value: number) => void;
+  monthlyPayment: number;
+  setMonthlyPayment: (value: number) => void;
+  midMonthPercentages: Record<string, number>;
+  setMidMonthPercentages: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  endOfMonthPercentages: Record<string, number>;
+  setEndOfMonthPercentages: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+}
+
+const InvestmentsPage: React.FC<InvestmentsPageProps> = ({ 
+    jars, onRemoveJar, onAddJar, expensesForMonth,
+    fortnightlyIncome, setFortnightlyIncome,
+    monthlyPayment, setMonthlyPayment,
+    midMonthPercentages, setMidMonthPercentages,
+    endOfMonthPercentages, setEndOfMonthPercentages
+}) => {
     
     const [fortnightlyIncomeInput, setFortnightlyIncomeInput] = useState(fortnightlyIncome > 0 ? fortnightlyIncome.toString().replace('.', ',') : '');
     const [monthlyPaymentInput, setMonthlyPaymentInput] = useState(monthlyPayment > 0 ? monthlyPayment.toString().replace('.', ',') : '');
 
-    const [midMonthPercentages, setMidMonthPercentages] = useLocalStorage<Record<string, number>>('midMonthPercentages', {});
-    const [endOfMonthPercentages, setEndOfMonthPercentages] = useLocalStorage<Record<string, number>>('endOfMonthPercentages', {});
+    useEffect(() => {
+        setFortnightlyIncomeInput(fortnightlyIncome > 0 ? fortnightlyIncome.toString().replace('.', ',') : '');
+    }, [fortnightlyIncome]);
+
+    useEffect(() => {
+        setMonthlyPaymentInput(monthlyPayment > 0 ? monthlyPayment.toString().replace('.', ',') : '');
+    }, [monthlyPayment]);
 
     const creditCardExpenses = useMemo(() => {
         return expensesForMonth
