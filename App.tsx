@@ -405,7 +405,7 @@ export default function App() {
 // --- SUB-COMPONENTS ---
 const Header: React.FC = () => (
     <header className="mb-8">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600 flex items-center gap-3">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600 flex items-center gap-3">
             <WalletIcon /> FinanZero
         </h1>
         <p className="text-slate-400 mt-2">Seu painel de controle financeiro pessoal.</p>
@@ -420,7 +420,7 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
 
   return (
     <div className="mb-8 border-b border-dark-700">
-      <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+      <nav className="-mb-px flex justify-center sm:justify-start space-x-4 sm:space-x-6" aria-label="Tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -429,7 +429,7 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
               activeTab === tab.id
                 ? 'border-accent text-accent'
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors`}
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center transition-colors`}
           >
             {tab.icon}
             {tab.name}
@@ -478,7 +478,7 @@ const InvestmentReport: React.FC<InvestmentReportProps> = ({
 
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-            <h2 className="text-2xl font-bold text-slate-100 mb-6 text-center">Relatório de Investimentos do Mês</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-6 text-center">Relatório de Investimentos do Mês</h2>
             
             <ul className="space-y-3 mb-6">
                 {investmentTotals.totalsByJar.filter(j => j.total > 0).map(jarTotal => (
@@ -491,9 +491,9 @@ const InvestmentReport: React.FC<InvestmentReportProps> = ({
 
             <hr className="border-dark-600 my-4"/>
 
-            <div className="flex justify-between items-center text-xl mt-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-lg sm:text-xl mt-4">
                 <span className="font-bold text-slate-100">Total Investido no Mês:</span>
-                <span className="font-extrabold text-2xl text-green-400">{formatCurrency(investmentTotals.grandTotal)}</span>
+                <span className="font-extrabold text-xl sm:text-2xl text-green-400">{formatCurrency(investmentTotals.grandTotal)}</span>
             </div>
         </div>
     );
@@ -550,7 +550,7 @@ const InvestmentsPage: React.FC<{
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                 <div className="lg:col-span-3 space-y-8">
                     <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                        <h2 className="text-2xl font-bold text-slate-100 mb-4">Configurar Ganhos para Investimento</h2>
+                        <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Configurar Ganhos para Investimento</h2>
                         <div className="space-y-4">
                             <div>
                                 <label className="block mb-1 font-semibold text-slate-300">Receita Quinzenal (adiantamento)</label>
@@ -564,7 +564,7 @@ const InvestmentsPage: React.FC<{
                     </div>
 
                     <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                        <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Quinzenal (Dia 15)</h2>
+                        <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Planejamento Quinzenal (Dia 15)</h2>
                         <div className="space-y-2 text-lg mb-4">
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-400">Receita Quinzenal:</span>
@@ -595,7 +595,7 @@ const InvestmentsPage: React.FC<{
 
                 <div className="lg:col-span-2">
                     <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                        <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Fim de Mês</h2>
+                        <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Planejamento Fim de Mês</h2>
                          <div className="flex justify-between items-center text-xl">
                             <span className="text-slate-200">Aporte sugerido:</span>
                             <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment)}</span>
@@ -647,15 +647,15 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; }> 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Receita Mensal</h2>
-                <p className="text-green-400 text-3xl font-bold">{formatCurrency(income)}</p>
+                <p className="text-green-400 text-2xl sm:text-3xl font-bold">{formatCurrency(income)}</p>
             </div>
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Gastos do Mês</h2>
-                <p className="text-red-400 text-3xl font-bold">{formatCurrency(expenses)}</p>
+                <p className="text-red-400 text-2xl sm:text-3xl font-bold">{formatCurrency(expenses)}</p>
             </div>
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Sobra no Mês</h2>
-                <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-3xl font-bold`}>{formatCurrency(surplus)}</p>
+                <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-2xl sm:text-3xl font-bold`}>{formatCurrency(surplus)}</p>
             </div>
         </div>
     );
@@ -719,7 +719,7 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
-                 <h2 className="text-2xl font-bold text-slate-100 mb-4">Distribuição Mensal</h2>
+                 <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Distribuição Mensal</h2>
                  <p className="text-slate-400">Adicione uma receita para ver o gráfico de distribuição.</p>
             </div>
         );
@@ -736,9 +736,9 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
 
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8">
-            <h2 className="text-2xl font-bold text-slate-100 mb-4 text-center">Visão Geral do Mês</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4 text-center">Visão Geral do Mês</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="relative w-52 h-52 mx-auto">
+                <div className="relative w-48 h-48 sm:w-52 sm:h-52 mx-auto">
                     <svg className="w-full h-full" viewBox="0 0 200 200">
                         <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
                         <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income)}</text>
@@ -783,8 +783,9 @@ const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onE
     <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
         <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-slate-100">Receitas</h2>
-            <button onClick={onAddIncome} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                <PlusIcon className="h-5 w-5 mr-2" /> Adicionar
+            <button onClick={onAddIncome} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
+                <PlusIcon className="h-5 w-5" />
+                <span className="hidden sm:inline ml-2">Adicionar</span>
             </button>
         </div>
         <div className="flex-grow overflow-y-auto max-h-48 pr-2">
@@ -793,9 +794,9 @@ const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onE
             ) : (
                 <ul className="space-y-3">
                     {incomes.map(inc => (
-                        <li key={inc.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center">
-                            <p className="font-semibold">{inc.description}</p>
-                            <div className="flex items-center">
+                        <li key={inc.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                            <p className="font-semibold self-start">{inc.description}</p>
+                            <div className="flex items-center self-end sm:self-center">
                                 <p className="font-bold text-green-400 mr-4">{formatCurrency(inc.amount)}</p>
                                 <button onClick={() => onEditIncome(inc)} className="text-slate-500 hover:text-accent p-1">
                                     <EditIcon />
@@ -828,10 +829,10 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
     
   return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-2">
-                    <h2 className="text-2xl font-bold text-slate-100">Despesas</h2>
-                    <button onClick={onPreviousMonth} className="p-2 rounded-full hover:bg-dark-700 transition-colors">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+                <div className="flex items-center gap-2 self-center sm:self-auto">
+                    <h2 className="text-2xl font-bold text-slate-100 hidden sm:block">Despesas</h2>
+                     <button onClick={onPreviousMonth} className="p-2 rounded-full hover:bg-dark-700 transition-colors">
                         <ChevronLeftIcon />
                     </button>
                     <span className="font-semibold text-lg text-slate-400 capitalize w-36 text-center">{monthYearDisplay}</span>
@@ -839,8 +840,9 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                         <ChevronRightIcon />
                     </button>
                 </div>
-                <button onClick={onAddExpense} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                    <PlusIcon className="h-5 w-5 mr-2" /> Adicionar
+                <button onClick={onAddExpense} className="flex items-center justify-center bg-primary hover:bg-secondary text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
+                    <PlusIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline ml-2">Adicionar</span>
                 </button>
             </div>
             <div className="flex-grow overflow-y-auto max-h-96 pr-2">
@@ -861,18 +863,18 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                         }
 
                         return(
-                            <li key={exp.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center">
-                                <div>
+                            <li key={exp.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                                <div className="w-full">
                                     <div className="flex items-center gap-2 mb-1">
                                         <p className="font-semibold">{exp.description}</p>
                                         {exp.isRecurring && <RecurringIcon />}
                                     </div>
-                                    <div className="text-sm text-slate-400 flex items-center gap-4">
+                                    <div className="text-sm text-slate-400 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
                                         <span className="bg-dark-600 px-2 py-0.5 rounded-full text-xs font-medium">
                                             {exp.category} {exp.subcategory ? `> ${exp.subcategory}` : ''}
                                         </span>
                                         {exp.installments && (
-                                            <div className="flex-grow">
+                                            <div className="flex-grow w-full sm:w-auto">
                                                 <span>Parcela {currentInstallment}/{exp.installments.total}</span>
                                                 <div className="w-full bg-dark-900 rounded-full h-1.5 mt-1">
                                                     <div className="bg-accent h-1.5 rounded-full" style={{ width: `${(currentInstallment / exp.installments.total) * 100}%` }}></div>
@@ -881,7 +883,7 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center">
+                                <div className="flex items-center self-end sm:self-center">
                                     <p className="font-bold text-red-400 mr-4">
                                         {formatCurrency(exp.installments ? exp.amount / exp.installments.total : exp.amount)}
                                     </p>
@@ -919,8 +921,9 @@ const SavingsManager: React.FC<{
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-slate-100">Caixinhas</h2>
-                <button onClick={onAddJar} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                    <PlusIcon className="h-5 w-5 mr-2" /> Criar
+                <button onClick={onAddJar} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
+                    <PlusIcon className="h-5 w-5" />
+                     <span className="hidden sm:inline ml-2">Criar</span>
                 </button>
             </div>
             {surplus <= 0 && jars.length > 0 ? (
@@ -942,9 +945,9 @@ const SavingsManager: React.FC<{
                             const percentage = percentages[jar.id] || 0;
                             return (
                                 <li key={jar.id} className="bg-dark-700 p-3 rounded-lg">
-                                    <div className="flex justify-between items-center">
-                                        <span className="font-semibold">{jar.name}</span>
-                                        <div className="flex items-center gap-2">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
+                                        <span className="font-semibold self-start sm:self-center">{jar.name}</span>
+                                        <div className="flex items-center gap-2 self-end sm:self-center">
                                             <input type="number" value={percentage} onChange={(e) => onPercentageChange(jar.id, parseInt(e.target.value) || 0)} className="w-16 bg-dark-600 text-center rounded p-1" />
                                             <span>%</span>
                                             <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger">
@@ -952,7 +955,7 @@ const SavingsManager: React.FC<{
                                             </button>
                                         </div>
                                     </div>
-                                    <p className="text-accent font-bold mt-1">{formatCurrency((surplus * percentage) / 100)}</p>
+                                    <p className="text-accent font-bold mt-1 text-right sm:text-left">{formatCurrency((surplus * percentage) / 100)}</p>
                                 </li>
                             )
                         })}
