@@ -21,16 +21,20 @@ const TrendingDownIcon: React.FC = () => (
 const MinusCircleIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
 );
-// FIX: The 'title' prop is not a valid SVG attribute in React. Use the <title> element for accessibility.
 const RecurringIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <title>Gasto Recorrente</title>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 15M20 20l-1.5-1.5A9 9 0 003.5 9" />
     </svg>
 );
-
 const EditIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z" /></svg>
+);
+const ChevronLeftIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+);
+const ChevronRightIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
 );
 
 
@@ -42,10 +46,9 @@ const formatCurrency = (value: number) => {
 };
 
 const parseCurrencyInput = (value: string): number => {
-    if (typeof value !== 'string') return 0;
-    // Remove thousand separators (dot), handle empty strings, and replace decimal comma with a dot for parsing.
+    if (typeof value !== 'string' || value.trim() === '') return 0;
+    // Normalize the string: remove thousand separators (.) and then replace the decimal comma (,) with a dot (.).
     const sanitizedValue = value.replace(/\./g, '').replace(',', '.');
-    if (sanitizedValue === '') return 0;
     const numericValue = parseFloat(sanitizedValue);
     return isNaN(numericValue) ? 0 : numericValue;
 };
@@ -86,6 +89,7 @@ export default function App() {
   const [isExpenseModalOpen, setExpenseModalOpen] = useState(false);
   const [isJarModalOpen, setJarModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [displayedDate, setDisplayedDate] = useState(new Date());
 
   const calculateMonthlyExpenses = useCallback((date: Date) => {
     const targetMonthYear = getMonthYear(date);
@@ -104,14 +108,16 @@ export default function App() {
         }
       } else if (expense.installments) {
         const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-        if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
-            effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+        // Card closing logic for installments should apply to the start date
+        const firstPaymentDate = new Date(effectiveStartDate);
+         if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+            firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
         }
         
         const installmentAmount = expense.amount / expense.installments.total;
         for (let i = 0; i < expense.installments.total; i++) {
-          const installmentDate = new Date(effectiveStartDate);
-          installmentDate.setMonth(effectiveStartDate.getMonth() + i);
+          const installmentDate = new Date(firstPaymentDate);
+          installmentDate.setMonth(firstPaymentDate.getMonth() + i);
           if (getMonthYear(installmentDate) === targetMonthYear) {
             return total + installmentAmount;
           }
@@ -131,17 +137,16 @@ export default function App() {
     }, 0);
   }, [expenses]);
 
-  const { currentMonthExpenses, previousMonthExpenses, surplus } = useMemo(() => {
-    const today = new Date();
-    const currentMonthExpenses = calculateMonthlyExpenses(today);
+  const { displayedMonthExpenses, previousMonthExpenses, surplus } = useMemo(() => {
+    const displayedMonthExpenses = calculateMonthlyExpenses(displayedDate);
     
-    const prevMonthDate = new Date();
-    prevMonthDate.setMonth(today.getMonth() - 1);
+    const prevMonthDate = new Date(displayedDate);
+    prevMonthDate.setMonth(displayedDate.getMonth() - 1);
     const previousMonthExpenses = calculateMonthlyExpenses(prevMonthDate);
 
-    const surplus = income - currentMonthExpenses;
-    return { currentMonthExpenses, previousMonthExpenses, surplus };
-  }, [income, calculateMonthlyExpenses]);
+    const surplus = income - displayedMonthExpenses;
+    return { displayedMonthExpenses, previousMonthExpenses, surplus };
+  }, [income, calculateMonthlyExpenses, displayedDate]);
 
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     setExpenses([...expenses, { ...expense, id: Date.now().toString() }]);
@@ -174,6 +179,33 @@ export default function App() {
   const removeJar = (id: string) => {
     setJars(jars.filter(j => j.id !== id));
   };
+  
+  const goToPreviousMonth = useCallback(() => {
+    setDisplayedDate(current => {
+      const newDate = new Date(current);
+      newDate.setMonth(newDate.getMonth() - 1);
+      return newDate;
+    });
+  }, []);
+
+  const goToNextMonth = useCallback(() => {
+    setDisplayedDate(current => {
+      const newDate = new Date(current);
+      newDate.setMonth(newDate.getMonth() + 1);
+      // Prevent going to the future
+      if (getMonthYear(newDate) > getMonthYear(new Date())) {
+        return current;
+      }
+      return newDate;
+    });
+  }, []);
+
+  const isNextMonthDisabled = useMemo(() => {
+     const nextMonth = new Date(displayedDate);
+     nextMonth.setMonth(nextMonth.getMonth() + 1);
+     return getMonthYear(nextMonth) > getMonthYear(new Date());
+  }, [displayedDate]);
+
 
   const totalJarPercentage = jars.reduce((acc, jar) => acc + jar.percentage, 0);
   
@@ -197,11 +229,20 @@ export default function App() {
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
       <main className="container mx-auto p-4 md:p-8">
         <Header />
-        <MonthlyAlert current={currentMonthExpenses} previous={previousMonthExpenses} />
-        <Summary income={income} expenses={currentMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
-        <FinancialChart income={income} expenses={currentMonthExpenses} surplus={surplus} />
+        <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
+        <Summary income={income} expenses={displayedMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
+        <FinancialChart income={income} expenses={displayedMonthExpenses} surplus={surplus} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-            <ExpenseManager expenses={expenses} onAddExpense={handleStartAddExpense} onEditExpense={handleStartEditExpense} onRemoveExpense={removeExpense} />
+            <ExpenseManager 
+              expenses={expenses} 
+              displayedDate={displayedDate}
+              onAddExpense={handleStartAddExpense} 
+              onEditExpense={handleStartEditExpense} 
+              onRemoveExpense={removeExpense}
+              onPreviousMonth={goToPreviousMonth}
+              onNextMonth={goToNextMonth}
+              isNextMonthDisabled={isNextMonthDisabled}
+            />
             <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
         </div>
       </main>
@@ -368,11 +409,20 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
     );
 };
 
+interface ExpenseManagerProps {
+  expenses: Expense[];
+  displayedDate: Date;
+  onAddExpense: () => void;
+  onEditExpense: (expense: Expense) => void;
+  onRemoveExpense: (id: string) => void;
+  onPreviousMonth: () => void;
+  onNextMonth: () => void;
+  isNextMonthDisabled: boolean;
+}
 
-const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, onEditExpense: (expense: Expense) => void, onRemoveExpense: (id: string) => void }> = ({ expenses, onAddExpense, onEditExpense, onRemoveExpense }) => {
-  const currentMonthExpenses = useMemo(() => {
-    const today = new Date();
-    const currentMonthKey = getMonthYear(today);
+const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth, isNextMonthDisabled }) => {
+  const displayedMonthExpenses = useMemo(() => {
+    const displayedMonthKey = getMonthYear(displayedDate);
     const CARD_CLOSING_DAY = 15;
     
     return expenses.filter(expense => {
@@ -382,17 +432,23 @@ const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, 
               effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
           }
           const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
-          return effectiveStartMonthYear <= currentMonthKey;
+          return effectiveStartMonthYear <= displayedMonthKey;
       }
 
       if (expense.installments) {
           const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-           if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
-              effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+          const firstPaymentDate = new Date(effectiveStartDate);
+          if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+              firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
           }
-          const endDate = new Date(effectiveStartDate);
-          endDate.setMonth(effectiveStartDate.getMonth() + expense.installments.total - 1);
-          return today >= effectiveStartDate && today <= endDate;
+          for (let i = 0; i < expense.installments.total; i++) {
+            const installmentDate = new Date(firstPaymentDate);
+            installmentDate.setMonth(firstPaymentDate.getMonth() + i);
+            if (getMonthYear(installmentDate) === displayedMonthKey) {
+                return true;
+            }
+          }
+          return false;
       }
       
       const effectiveDate = new Date(expense.date + 'T00:00:00');
@@ -400,29 +456,39 @@ const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, 
           effectiveDate.setMonth(effectiveDate.getMonth() + 1);
       }
       const effectiveMonthYear = getMonthYear(effectiveDate);
-      return effectiveMonthYear === currentMonthKey;
+      return effectiveMonthYear === displayedMonthKey;
     });
-  }, [expenses]);
+  }, [expenses, displayedDate]);
+
+  const monthYearDisplay = displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     
   return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-slate-100">Despesas</h2>
+                <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-bold text-slate-100">Despesas</h2>
+                    <button onClick={onPreviousMonth} className="p-2 rounded-full hover:bg-dark-700 transition-colors">
+                        <ChevronLeftIcon />
+                    </button>
+                    <span className="font-semibold text-lg text-slate-400 capitalize w-36 text-center">{monthYearDisplay}</span>
+                    <button onClick={onNextMonth} disabled={isNextMonthDisabled} className="p-2 rounded-full hover:bg-dark-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <ChevronRightIcon />
+                    </button>
+                </div>
                 <button onClick={onAddExpense} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
                     <PlusIcon className="h-5 w-5 mr-2" /> Adicionar
                 </button>
             </div>
             <div className="flex-grow overflow-y-auto max-h-96 pr-2">
-            {currentMonthExpenses.length === 0 ? (
+            {displayedMonthExpenses.length === 0 ? (
                 <p className="text-slate-400 text-center py-10">Nenhuma despesa este mês.</p>
             ) : (
                 <ul className="space-y-3">
-                    {currentMonthExpenses.map(exp => {
-                        const expenseDate = new Date(exp.date + 'T00:00:00');
+                    {displayedMonthExpenses.map(exp => {
+                        const expenseStartDate = new Date(exp.date + 'T00:00:00');
                         let currentInstallment = 0;
                         if(exp.installments){
-                            const today = new Date();
-                            const monthsDiff = (today.getFullYear() - expenseDate.getFullYear()) * 12 + (today.getMonth() - expenseDate.getMonth());
+                            const monthsDiff = (displayedDate.getFullYear() - expenseStartDate.getFullYear()) * 12 + (displayedDate.getMonth() - expenseStartDate.getMonth());
                             currentInstallment = monthsDiff + 1;
                         }
 
@@ -553,6 +619,9 @@ const ExpenseModal: React.FC<{
             setIsInstallment(hasInstallments);
             if (hasInstallments) {
                 setInstallments(expenseToEdit.installments!.total.toString());
+                 // Logic to determine current installment when editing is complex,
+                 // so we won't try to auto-populate it for now.
+                 setCurrentInstallment('1'); 
             } else {
                 setInstallments('2');
             }
@@ -571,9 +640,15 @@ const ExpenseModal: React.FC<{
         }
 
         let finalDate = date;
-        if (!isEditing && isInstallment) {
+        if (isInstallment) {
             const currentPaymentDate = new Date(date + 'T00:00:00');
-            currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (parseInt(currentInstallment, 10) - 1));
+            const currentInstallmentNum = parseInt(currentInstallment, 10);
+            
+            // Only adjust the start date if it's a new expense.
+            // When editing, we assume the original start date is correct.
+            if (!isEditing && currentInstallmentNum > 1) {
+              currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (currentInstallmentNum - 1));
+            }
             finalDate = currentPaymentDate.toISOString().split('T')[0];
         }
 
@@ -605,7 +680,7 @@ const ExpenseModal: React.FC<{
                     <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
                  <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? (isEditing ? 'de Início' : 'da Parcela Atual') : ''}</label>
+                    <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? (isEditing ? 'de Início da Compra' : 'do Pagamento Atual') : 'da Despesa'}</label>
                     <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
                 <div>
