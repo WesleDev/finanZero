@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useCallback } from 'react';
 import type { Expense, SavingsJar } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -22,9 +23,18 @@ const TrendingDownIcon: React.FC = () => (
 const MinusCircleIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
 );
+// FIX: The 'title' prop is not a valid SVG attribute in React. Use the <title> element for accessibility.
+const RecurringIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <title>Gasto Recorrente</title>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 15M20 20l-1.5-1.5A9 9 0 003.5 9" />
+    </svg>
+);
 
 
-// --- UTILS ---
+// --- UTILS & CONSTANTS ---
+const EXPENSE_CATEGORIES = ['Cartão de Crédito', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros'] as const;
+
 const formatCurrency = (value: number) => {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
@@ -67,19 +77,25 @@ export default function App() {
   const calculateMonthlyExpenses = useCallback((date: Date) => {
     const targetMonthYear = getMonthYear(date);
     return expenses.reduce((total, expense) => {
-      const expenseDate = new Date(expense.date + 'T00:00:00');
-      if (!expense.installments) {
-        if (getMonthYear(expenseDate) === targetMonthYear) {
+      const expenseStartDate = new Date(expense.date + 'T00:00:00');
+      const expenseStartMonthYear = getMonthYear(expenseStartDate);
+
+      if (expense.isRecurring) {
+        if (expenseStartMonthYear <= targetMonthYear) {
           return total + expense.amount;
         }
-      } else {
+      } else if (expense.installments) {
         const installmentAmount = expense.amount / expense.installments.total;
         for (let i = 0; i < expense.installments.total; i++) {
-          const installmentDate = new Date(expenseDate);
-          installmentDate.setMonth(expenseDate.getMonth() + i);
+          const installmentDate = new Date(expenseStartDate);
+          installmentDate.setMonth(expenseStartDate.getMonth() + i);
           if (getMonthYear(installmentDate) === targetMonthYear) {
             return total + installmentAmount;
           }
+        }
+      } else { // One-time expense
+        if (expenseStartMonthYear === targetMonthYear) {
+          return total + expense.amount;
         }
       }
       return total;
@@ -223,7 +239,6 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
     const radius = 80;
     const circumference = 2 * Math.PI * radius;
     const expenseStrokeDashoffset = circumference - (expensesPercentage / 100) * circumference;
-    const surplusStrokeDashoffset = 0; // The surplus starts from the beginning
     
     const expenseRotation = (surplusPercentage / 100) * 360;
 
@@ -299,15 +314,20 @@ const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, 
     const currentMonthKey = getMonthYear(today);
     
     return expenses.filter(expense => {
-      const expenseDate = new Date(expense.date + 'T00:00:00');
-      if (!expense.installments) {
-        return getMonthYear(expenseDate) === currentMonthKey;
+      const expenseStartDate = new Date(expense.date + 'T00:00:00');
+      const expenseStartMonthYear = getMonthYear(expenseStartDate);
+
+      if (expense.isRecurring) {
+          return expenseStartMonthYear <= currentMonthKey;
+      }
+
+      if (expense.installments) {
+          const endDate = new Date(expenseStartDate);
+          endDate.setMonth(expenseStartDate.getMonth() + expense.installments.total - 1);
+          return today >= expenseStartDate && today <= endDate;
       }
       
-      const endDate = new Date(expenseDate);
-      endDate.setMonth(endDate.getMonth() + expense.installments.total - 1);
-      
-      return today >= expenseDate && today <= endDate;
+      return expenseStartMonthYear === currentMonthKey;
     });
   }, [expenses]);
     
@@ -336,15 +356,21 @@ const ExpenseManager: React.FC<{ expenses: Expense[], onAddExpense: () => void, 
                         return(
                             <li key={exp.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center">
                                 <div>
-                                    <p className="font-semibold">{exp.description}</p>
-                                    {exp.installments && (
-                                        <div className="text-sm text-slate-400">
-                                            <span>Parcela {currentInstallment}/{exp.installments.total}</span>
-                                            <div className="w-full bg-dark-600 rounded-full h-1.5 mt-1">
-                                                <div className="bg-accent h-1.5 rounded-full" style={{ width: `${(currentInstallment / exp.installments.total) * 100}%` }}></div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-semibold">{exp.description}</p>
+                                        {exp.isRecurring && <RecurringIcon />}
+                                    </div>
+                                    <div className="text-sm text-slate-400 flex items-center gap-4">
+                                        <span className="bg-dark-600 px-2 py-0.5 rounded-full text-xs font-medium">{exp.category}</span>
+                                        {exp.installments && (
+                                            <div className="flex-grow">
+                                                <span>Parcela {currentInstallment}/{exp.installments.total}</span>
+                                                <div className="w-full bg-dark-900 rounded-full h-1.5 mt-1">
+                                                    <div className="bg-accent h-1.5 rounded-full" style={{ width: `${(currentInstallment / exp.installments.total) * 100}%` }}></div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex items-center">
                                     <p className="font-bold text-red-400 mr-4">
@@ -415,6 +441,10 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    // FIX: Explicitly type the category state as `string`. The type was being inferred as the literal
+    // value of EXPENSE_CATEGORIES[0], which caused a type mismatch with the `string` value from the select's onChange event.
+    const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+    const [isRecurring, setIsRecurring] = useState(false);
     const [isInstallment, setIsInstallment] = useState(false);
     const [installments, setInstallments] = useState('2');
     const [currentInstallment, setCurrentInstallment] = useState('1');
@@ -424,8 +454,6 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
 
         let firstPaymentDate = date;
         if (isInstallment) {
-            // The user enters the date of the current installment payment.
-            // We calculate the date of the first installment payment to store it.
             const currentPaymentDate = new Date(date + 'T00:00:00');
             currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (parseInt(currentInstallment, 10) - 1));
             firstPaymentDate = currentPaymentDate.toISOString().split('T')[0];
@@ -435,6 +463,8 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
             description,
             amount: parseFloat(amount),
             date: firstPaymentDate,
+            category,
+            isRecurring: isRecurring && !isInstallment,
             ...(isInstallment && { installments: { total: parseInt(installments, 10) } })
         };
         onAddExpense(expenseData);
@@ -443,6 +473,8 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
         setDescription('');
         setAmount('');
         setDate(new Date().toISOString().split('T')[0]);
+        setCategory(EXPENSE_CATEGORIES[0]);
+        setIsRecurring(false);
         setIsInstallment(false);
         setInstallments('2');
         setCurrentInstallment('1');
@@ -463,9 +495,21 @@ const ExpenseModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddExpens
                     <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? 'da Parcela Atual' : ''}</label>
                     <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
-                <div className="flex items-center">
-                    <input type="checkbox" id="isInstallment" checked={isInstallment} onChange={e => setIsInstallment(e.target.checked)} className="mr-2 h-4 w-4 rounded accent-accent"/>
-                    <label htmlFor="isInstallment">É parcelado?</label>
+                <div>
+                    <label className="block mb-1 font-semibold text-slate-300">Categoria</label>
+                    <select value={category} onChange={e => setCategory(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
+                        {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                </div>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                        <input type="checkbox" id="isInstallment" checked={isInstallment} onChange={e => setIsInstallment(e.target.checked)} className="mr-2 h-4 w-4 rounded accent-accent"/>
+                        <label htmlFor="isInstallment">É parcelado?</label>
+                    </div>
+                     <div className="flex items-center">
+                        <input type="checkbox" id="isRecurring" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} disabled={isInstallment} className="mr-2 h-4 w-4 rounded accent-accent disabled:opacity-50"/>
+                        <label htmlFor="isRecurring" className={isInstallment ? 'text-slate-500' : ''}>É recorrente?</label>
+                    </div>
                 </div>
                 {isInstallment && (
                     <>
