@@ -472,10 +472,17 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
             ) : (
                 <ul className="space-y-3">
                     {displayedMonthExpenses.map(exp => {
-                        const expenseStartDate = new Date(exp.date + 'T00:00:00');
                         let currentInstallment = 0;
                         if(exp.installments){
-                            const monthsDiff = (displayedDate.getFullYear() - expenseStartDate.getFullYear()) * 12 + (displayedDate.getMonth() - expenseStartDate.getMonth());
+                            const CARD_CLOSING_DAY = 15;
+                            // Calculate the actual first payment date, considering the card closing day
+                            const firstPaymentDate = new Date(exp.date + 'T00:00:00');
+                            if (exp.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+                                firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+                            }
+                            
+                            // Calculate the difference in months from the first payment date
+                            const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
                             currentInstallment = monthsDiff + 1;
                         }
 
