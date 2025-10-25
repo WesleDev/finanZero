@@ -41,6 +41,16 @@ const formatCurrency = (value: number) => {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
+const parseCurrencyInput = (value: string): number => {
+    if (typeof value !== 'string') return 0;
+    // Remove thousand separators (dot), handle empty strings, and replace decimal comma with a dot for parsing.
+    const sanitizedValue = value.replace(/\./g, '').replace(',', '.');
+    if (sanitizedValue === '') return 0;
+    const numericValue = parseFloat(sanitizedValue);
+    return isNaN(numericValue) ? 0 : numericValue;
+};
+
+
 const getMonthYear = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
@@ -239,12 +249,16 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; onS
     const [newIncome, setNewIncome] = useState(income.toString());
 
     const handleIncomeSave = () => {
-        const value = parseFloat(newIncome.replace(',', '.'));
+        const value = parseCurrencyInput(newIncome);
         if(!isNaN(value)) {
             onSetIncome(value);
         }
         setEditingIncome(false);
     }
+    
+    useEffect(() => {
+        setNewIncome(income.toString().replace('.', ','));
+    }, [income]);
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -252,7 +266,7 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; onS
                 <h2 className="text-slate-400 text-lg">Receita Mensal</h2>
                 {editingIncome ? (
                      <div className="flex items-center mt-2">
-                        <input type="number" value={newIncome} onChange={(e) => setNewIncome(e.target.value)} onBlur={handleIncomeSave} onKeyDown={(e) => e.key === 'Enter' && handleIncomeSave()} autoFocus className="bg-dark-700 text-3xl font-bold w-full p-1 rounded" />
+                        <input type="text" inputMode="decimal" value={newIncome} onChange={(e) => setNewIncome(e.target.value)} onBlur={handleIncomeSave} onKeyDown={(e) => e.key === 'Enter' && handleIncomeSave()} autoFocus className="bg-dark-700 text-3xl font-bold w-full p-1 rounded" />
                      </div>
                 ) : (
                     <p className="text-green-400 text-3xl font-bold">{formatCurrency(income)}</p>
@@ -550,8 +564,8 @@ const ExpenseModal: React.FC<{
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        const numericAmount = parseFloat(amount.replace(',', '.'));
-        if (isNaN(numericAmount) || numericAmount <= 0) {
+        const numericAmount = parseCurrencyInput(amount);
+        if (numericAmount <= 0) {
             alert('Por favor, insira um valor válido.');
             return;
         }
