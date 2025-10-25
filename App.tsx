@@ -288,6 +288,11 @@ export default function App() {
     const totalPercentage = newJars.reduce((acc, jar) => acc + jar.percentage, 0);
     if(totalPercentage <= 100) {
         setJars(newJars);
+    } else {
+        // Optionally show an alert or handle the error
+        console.warn("Total percentage cannot exceed 100%");
+        // For a better UX, you might want to still set the value but show an error
+        setJars(newJars);
     }
   };
     
@@ -312,7 +317,12 @@ export default function App() {
     });
   }, []);
 
-  const totalJarPercentage = jars.reduce((acc, jar) => acc + jar.percentage, 0);
+  const dashboardPercentages = useMemo(() => {
+    return jars.reduce((acc, jar) => {
+        acc[jar.id] = jar.percentage;
+        return acc;
+    }, {} as Record<string, number>);
+  }, [jars]);
 
   return (
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
@@ -351,7 +361,14 @@ export default function App() {
                         />
                      </div>
                 </div>
-                <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
+                <SavingsManager 
+                    jars={jars} 
+                    percentages={dashboardPercentages}
+                    surplus={surplus} 
+                    onAddJar={() => setJarModalOpen(true)} 
+                    onPercentageChange={updateJarPercentage} 
+                    onRemoveJar={removeJar}
+                />
             </div>
           </div>
         )}
@@ -359,10 +376,8 @@ export default function App() {
         {activeTab === 'investments' && (
           <InvestmentsPage
             jars={jars}
-            onUpdateJar={updateJarPercentage}
             onRemoveJar={removeJar}
             onAddJar={() => setJarModalOpen(true)}
-            totalPercentage={totalJarPercentage}
             expensesForMonth={displayedMonthExpensesList}
           />
         )}
@@ -426,19 +441,20 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
 };
 
 const InvestmentsPage: React.FC<{
-  jars: SavingsJar[],
-  onUpdateJar: (id: string, p: number) => void,
+  jars: Omit<SavingsJar, 'percentage'>[],
   onRemoveJar: (id: string) => void,
   onAddJar: () => void,
-  totalPercentage: number,
   expensesForMonth: Expense[]
-}> = ({ jars, onUpdateJar, onRemoveJar, onAddJar, totalPercentage, expensesForMonth }) => {
+}> = ({ jars, onRemoveJar, onAddJar, expensesForMonth }) => {
     
     const [fortnightlyIncome, setFortnightlyIncome] = useLocalStorage<number>('fortnightlyIncome', 0);
     const [monthlyPayment, setMonthlyPayment] = useLocalStorage<number>('monthlyPayment', 0);
     
     const [fortnightlyIncomeInput, setFortnightlyIncomeInput] = useState(fortnightlyIncome > 0 ? fortnightlyIncome.toString().replace('.', ',') : '');
     const [monthlyPaymentInput, setMonthlyPaymentInput] = useState(monthlyPayment > 0 ? monthlyPayment.toString().replace('.', ',') : '');
+
+    const [midMonthPercentages, setMidMonthPercentages] = useLocalStorage<Record<string, number>>('midMonthPercentages', {});
+    const [endOfMonthPercentages, setEndOfMonthPercentages] = useLocalStorage<Record<string, number>>('endOfMonthPercentages', {});
 
     const creditCardExpenses = useMemo(() => {
         return expensesForMonth
@@ -464,6 +480,10 @@ const InvestmentsPage: React.FC<{
         if (!isNaN(parsedValue)) {
             setMonthlyPayment(parsedValue);
         }
+    };
+
+    const handlePercentageChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>) => (jarId: string, percentage: number) => {
+        setter(prev => ({...prev, [jarId]: percentage }));
     };
 
     return (
@@ -502,7 +522,14 @@ const InvestmentsPage: React.FC<{
                     </div>
                     <hr className="border-dark-600 mb-4"/>
                      <p className="text-slate-400 mb-4 text-center">Distribua o saldo para investir nas suas caixinhas:</p>
-                    <SavingsManager jars={jars} surplus={midMonthSurplus} onAddJar={onAddJar} onUpdateJar={onUpdateJar} onRemoveJar={onRemoveJar} totalPercentage={totalPercentage} />
+                    <SavingsManager 
+                        jars={jars} 
+                        percentages={midMonthPercentages}
+                        surplus={midMonthSurplus} 
+                        onAddJar={onAddJar} 
+                        onPercentageChange={handlePercentageChange(setMidMonthPercentages)}
+                        onRemoveJar={onRemoveJar} 
+                    />
                 </div>
             </div>
 
@@ -514,6 +541,16 @@ const InvestmentsPage: React.FC<{
                         <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment)}</span>
                     </div>
                     <p className="text-slate-500 mt-2 text-sm">Este é o valor que você configurou como seu pagamento de fim de mês.</p>
+                    <hr className="border-dark-600 my-4"/>
+                    <p className="text-slate-400 mb-4 text-center">Distribua o aporte nas suas caixinhas:</p>
+                    <SavingsManager 
+                        jars={jars}
+                        percentages={endOfMonthPercentages}
+                        surplus={monthlyPayment}
+                        onAddJar={onAddJar}
+                        onPercentageChange={handlePercentageChange(setEndOfMonthPercentages)}
+                        onRemoveJar={onRemoveJar}
+                    />
                 </div>
             </div>
         </div>
@@ -797,7 +834,19 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
     );
 };
 
-const SavingsManager: React.FC<{ jars: SavingsJar[], surplus: number, onAddJar: () => void, onUpdateJar: (id: string, p: number) => void, onRemoveJar: (id: string) => void, totalPercentage: number }> = ({ jars, surplus, onAddJar, onUpdateJar, onRemoveJar, totalPercentage }) => {
+const SavingsManager: React.FC<{ 
+    jars: {id: string, name: string}[], 
+    percentages: Record<string, number>,
+    surplus: number, 
+    onAddJar: () => void, 
+    onPercentageChange: (id: string, p: number) => void, 
+    onRemoveJar: (id: string) => void 
+}> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar }) => {
+    
+    const totalPercentage = useMemo(() => {
+        return jars.reduce((acc, jar) => acc + (percentages[jar.id] || 0), 0);
+    }, [jars, percentages]);
+
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
             <div className="flex justify-between items-center mb-4">
@@ -806,8 +855,8 @@ const SavingsManager: React.FC<{ jars: SavingsJar[], surplus: number, onAddJar: 
                     <PlusIcon className="h-5 w-5 mr-2" /> Criar
                 </button>
             </div>
-            {surplus <= 0 ? (
-                <p className="text-center text-slate-400 py-10">Você precisa de um saldo positivo para criar caixinhas.</p>
+            {surplus <= 0 && jars.length > 0 ? (
+                <p className="text-center text-slate-400 py-10">Você precisa de um saldo positivo para distribuir.</p>
             ) : (
                 <div className="flex-grow">
                     <div className="mb-4">
@@ -815,27 +864,30 @@ const SavingsManager: React.FC<{ jars: SavingsJar[], surplus: number, onAddJar: 
                             <div className={`rounded-full h-4 text-xs flex items-center justify-center text-white ${totalPercentage > 100 ? 'bg-danger' : 'bg-success'}`} style={{ width: `${Math.min(totalPercentage, 100)}%` }}>{totalPercentage}%</div>
                         </div>
                         {totalPercentage > 100 && <p className="text-danger text-sm mt-1">Total não pode exceder 100%.</p>}
-                         {totalPercentage < 100 && <p className="text-yellow-400 text-sm mt-1">Faltam {100-totalPercentage}% para distribuir.</p>}
+                         {totalPercentage < 100 && totalPercentage > 0 && <p className="text-yellow-400 text-sm mt-1">Faltam {100-totalPercentage}% para distribuir.</p>}
                     </div>
                     {jars.length === 0 ? (
                          <p className="text-slate-400 text-center py-10">Crie caixinhas para guardar o dinheiro que sobra.</p>
                     ) : (
                     <ul className="space-y-3 max-h-80 overflow-y-auto pr-2">
-                        {jars.map(jar => (
-                            <li key={jar.id} className="bg-dark-700 p-3 rounded-lg">
-                                <div className="flex justify-between items-center">
-                                    <span className="font-semibold">{jar.name}</span>
-                                    <div className="flex items-center gap-2">
-                                        <input type="number" value={jar.percentage} onChange={(e) => onUpdateJar(jar.id, parseInt(e.target.value) || 0)} className="w-16 bg-dark-600 text-center rounded p-1" />
-                                        <span>%</span>
-                                        <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger">
-                                            <TrashIcon />
-                                        </button>
+                        {jars.map(jar => {
+                            const percentage = percentages[jar.id] || 0;
+                            return (
+                                <li key={jar.id} className="bg-dark-700 p-3 rounded-lg">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-semibold">{jar.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <input type="number" value={percentage} onChange={(e) => onPercentageChange(jar.id, parseInt(e.target.value) || 0)} className="w-16 bg-dark-600 text-center rounded p-1" />
+                                            <span>%</span>
+                                            <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger">
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                                <p className="text-accent font-bold mt-1">{formatCurrency((surplus * jar.percentage) / 100)}</p>
-                            </li>
-                        ))}
+                                    <p className="text-accent font-bold mt-1">{formatCurrency((surplus * percentage) / 100)}</p>
+                                </li>
+                            )
+                        })}
                     </ul>
                     )}
                 </div>
