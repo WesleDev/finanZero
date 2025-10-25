@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import type { Expense, SavingsJar } from './types';
+import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 
 // --- ICONS ---
@@ -36,7 +36,6 @@ const ChevronLeftIcon: React.FC = () => (
 const ChevronRightIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
 );
-
 
 // --- UTILS & CONSTANTS ---
 const EXPENSE_CATEGORIES = ['Cartão de Crédito', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros'] as const;
@@ -92,13 +91,21 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 
 // --- APP COMPONENT ---
 export default function App() {
-  const [income, setIncome] = useLocalStorage('income', 0);
+  const [incomes, setIncomes] = useLocalStorage<Income[]>('incomes', []);
   const [expenses, setExpenses] = useLocalStorage<Expense[]>('expenses', []);
   const [jars, setJars] = useLocalStorage<SavingsJar[]>('jars', []);
+  
+  const [isIncomeModalOpen, setIncomeModalOpen] = useState(false);
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+
   const [isExpenseModalOpen, setExpenseModalOpen] = useState(false);
-  const [isJarModalOpen, setJarModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  const [isJarModalOpen, setJarModalOpen] = useState(false);
+
   const [displayedDate, setDisplayedDate] = useState(new Date());
+  
+  const totalIncome = useMemo(() => incomes.reduce((acc, inc) => acc + inc.amount, 0), [incomes]);
 
   const calculateMonthlyExpenses = useCallback((date: Date) => {
     const targetMonthYear = getMonthYear(date);
@@ -152,9 +159,9 @@ export default function App() {
     prevMonthDate.setMonth(displayedDate.getMonth() - 1);
     const previousMonthExpenses = calculateMonthlyExpenses(prevMonthDate);
 
-    const surplus = income - displayedMonthExpenses;
+    const surplus = totalIncome - displayedMonthExpenses;
     return { displayedMonthExpenses, previousMonthExpenses, surplus };
-  }, [income, calculateMonthlyExpenses, displayedDate]);
+  }, [totalIncome, calculateMonthlyExpenses, displayedDate]);
 
   const displayedMonthExpensesList = useMemo(() => {
     const displayedMonthKey = getMonthYear(displayedDate);
@@ -195,7 +202,38 @@ export default function App() {
     });
   }, [expenses, displayedDate]);
 
+  // --- INCOME CRUD ---
+  const addIncome = (income: Omit<Income, 'id'>) => {
+    setIncomes([...incomes, { ...income, id: Date.now().toString() }]);
+    setIncomeModalOpen(false);
+  };
 
+  const updateIncome = (updatedIncome: Income) => {
+    setIncomes(incomes.map(i => (i.id === updatedIncome.id ? updatedIncome : i)));
+    setIncomeModalOpen(false);
+    setEditingIncome(null);
+  };
+    
+  const removeIncome = (id: string) => {
+    setIncomes(incomes.filter(i => i.id !== id));
+  };
+  
+  const handleStartAddIncome = () => {
+    setEditingIncome(null);
+    setIncomeModalOpen(true);
+  };
+
+  const handleStartEditIncome = (income: Income) => {
+    setEditingIncome(income);
+    setIncomeModalOpen(true);
+  };
+
+  const handleCloseIncomeModal = () => {
+    setIncomeModalOpen(false);
+    setEditingIncome(null);
+  };
+
+  // --- EXPENSE CRUD ---
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     setExpenses([...expenses, { ...expense, id: Date.now().toString() }]);
     setExpenseModalOpen(false);
@@ -210,7 +248,23 @@ export default function App() {
   const removeExpense = (id: string) => {
     setExpenses(expenses.filter(e => e.id !== id));
   };
+    
+  const handleStartAddExpense = () => {
+    setEditingExpense(null);
+    setExpenseModalOpen(true);
+  };
   
+  const handleStartEditExpense = (expense: Expense) => {
+    setEditingExpense(expense);
+    setExpenseModalOpen(true);
+  };
+  
+  const handleCloseExpenseModal = () => {
+    setExpenseModalOpen(false);
+    setEditingExpense(null);
+  };
+  
+  // --- JAR CRUD ---
   const addJar = (jar: Omit<SavingsJar, 'id'>) => {
       setJars([...jars, { ...jar, id: Date.now().toString() }]);
       setJarModalOpen(false);
@@ -228,6 +282,7 @@ export default function App() {
     setJars(jars.filter(j => j.id !== id));
   };
   
+  // --- NAVIGATION ---
   const goToPreviousMonth = useCallback(() => {
     setDisplayedDate(current => {
       const newDate = new Date(current);
@@ -245,50 +300,51 @@ export default function App() {
   }, []);
 
   const totalJarPercentage = jars.reduce((acc, jar) => acc + jar.percentage, 0);
-  
-  const handleStartAddExpense = () => {
-    setEditingExpense(null);
-    setExpenseModalOpen(true);
-  };
-  
-  const handleStartEditExpense = (expense: Expense) => {
-    setEditingExpense(expense);
-    setExpenseModalOpen(true);
-  };
-  
-  const handleCloseExpenseModal = () => {
-    setExpenseModalOpen(false);
-    setEditingExpense(null);
-  };
-
 
   return (
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
       <main className="container mx-auto p-4 md:p-8">
         <Header />
         <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
-        <Summary income={income} expenses={displayedMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
+        <Summary income={totalIncome} expenses={displayedMonthExpenses} surplus={surplus} />
         <FinancialChart 
-            income={income} 
+            income={totalIncome} 
             expenses={displayedMonthExpenses} 
             surplus={surplus} 
             monthlyExpensesList={displayedMonthExpensesList}
             displayedDate={displayedDate}
         />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-            <ExpenseManager 
-              expenses={displayedMonthExpensesList} 
-              displayedDate={displayedDate}
-              onAddExpense={handleStartAddExpense} 
-              onEditExpense={handleStartEditExpense} 
-              onRemoveExpense={removeExpense}
-              onPreviousMonth={goToPreviousMonth}
-              onNextMonth={goToNextMonth}
-            />
+            <div>
+                 <IncomeManager 
+                    incomes={incomes}
+                    onAddIncome={handleStartAddIncome}
+                    onEditIncome={handleStartEditIncome}
+                    onRemoveIncome={removeIncome}
+                 />
+                 <div className="mt-8">
+                    <ExpenseManager 
+                      expenses={displayedMonthExpensesList} 
+                      displayedDate={displayedDate}
+                      onAddExpense={handleStartAddExpense} 
+                      onEditExpense={handleStartEditExpense} 
+                      onRemoveExpense={removeExpense}
+                      onPreviousMonth={goToPreviousMonth}
+                      onNextMonth={goToNextMonth}
+                    />
+                 </div>
+            </div>
             <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
         </div>
       </main>
       
+      <IncomeModal
+        isOpen={isIncomeModalOpen}
+        onClose={handleCloseIncomeModal}
+        onAddIncome={addIncome}
+        onUpdateIncome={updateIncome}
+        incomeToEdit={editingIncome}
+      />
       <ExpenseModal 
         isOpen={isExpenseModalOpen} 
         onClose={handleCloseExpenseModal} 
@@ -327,33 +383,12 @@ const MonthlyAlert: React.FC<{ current: number; previous: number }> = ({ current
     }
 };
 
-const Summary: React.FC<{ income: number; expenses: number; surplus: number; onSetIncome: (income: number) => void }> = ({ income, expenses, surplus, onSetIncome }) => {
-    const [editingIncome, setEditingIncome] = useState(false);
-    const [newIncome, setNewIncome] = useState(income.toString());
-
-    const handleIncomeSave = () => {
-        const value = parseCurrencyInput(newIncome);
-        if(!isNaN(value)) {
-            onSetIncome(value);
-        }
-        setEditingIncome(false);
-    }
-    
-    useEffect(() => {
-        setNewIncome(income.toString().replace('.', ','));
-    }, [income]);
-
+const Summary: React.FC<{ income: number; expenses: number; surplus: number; }> = ({ income, expenses, surplus }) => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-dark-800 p-6 rounded-xl shadow-lg cursor-pointer transition-transform hover:scale-105" onClick={() => setEditingIncome(true)}>
+            <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Receita Mensal</h2>
-                {editingIncome ? (
-                     <div className="flex items-center mt-2">
-                        <input type="text" inputMode="decimal" value={newIncome} onChange={(e) => setNewIncome(e.target.value)} onBlur={handleIncomeSave} onKeyDown={(e) => e.key === 'Enter' && handleIncomeSave()} autoFocus className="bg-dark-700 text-3xl font-bold w-full p-1 rounded" />
-                     </div>
-                ) : (
-                    <p className="text-green-400 text-3xl font-bold">{formatCurrency(income)}</p>
-                )}
+                <p className="text-green-400 text-3xl font-bold">{formatCurrency(income)}</p>
             </div>
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Gastos do Mês</h2>
@@ -475,6 +510,48 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
             </div>
         </div>
     );
+};
+
+interface IncomeManagerProps {
+  incomes: Income[];
+  onAddIncome: () => void;
+  onEditIncome: (income: Income) => void;
+  onRemoveIncome: (id: string) => void;
+}
+
+const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onEditIncome, onRemoveIncome }) => {
+  return (
+    <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
+        <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-slate-100">Receitas</h2>
+            <button onClick={onAddIncome} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                <PlusIcon className="h-5 w-5 mr-2" /> Adicionar
+            </button>
+        </div>
+        <div className="flex-grow overflow-y-auto max-h-48 pr-2">
+            {incomes.length === 0 ? (
+                <p className="text-slate-400 text-center py-10">Nenhuma receita cadastrada.</p>
+            ) : (
+                <ul className="space-y-3">
+                    {incomes.map(inc => (
+                        <li key={inc.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center">
+                            <p className="font-semibold">{inc.description}</p>
+                            <div className="flex items-center">
+                                <p className="font-bold text-green-400 mr-4">{formatCurrency(inc.amount)}</p>
+                                <button onClick={() => onEditIncome(inc)} className="text-slate-500 hover:text-accent p-1">
+                                    <EditIcon />
+                                </button>
+                                <button onClick={() => onRemoveIncome(inc.id)} className="text-slate-500 hover:text-danger p-1">
+                                    <TrashIcon />
+                                </button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    </div>
+  );
 };
 
 interface ExpenseManagerProps {
@@ -610,6 +687,61 @@ const SavingsManager: React.FC<{ jars: SavingsJar[], surplus: number, onAddJar: 
                 </div>
             )}
         </div>
+    );
+};
+
+const IncomeModal: React.FC<{ 
+    isOpen: boolean, 
+    onClose: () => void, 
+    onAddIncome: (income: Omit<Income, 'id'>) => void,
+    onUpdateIncome: (income: Income) => void,
+    incomeToEdit: Income | null
+}> = ({ isOpen, onClose, onAddIncome, onUpdateIncome, incomeToEdit }) => {
+    const [description, setDescription] = useState('');
+    const [amount, setAmount] = useState('');
+    const isEditing = !!incomeToEdit;
+
+    useEffect(() => {
+        if (incomeToEdit) {
+            setDescription(incomeToEdit.description);
+            setAmount(incomeToEdit.amount.toString().replace('.', ','));
+        } else {
+            setDescription('');
+            setAmount('');
+        }
+    }, [incomeToEdit]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const numericAmount = parseCurrencyInput(amount);
+        if (numericAmount <= 0) {
+            alert('Por favor, insira um valor válido.');
+            return;
+        }
+
+        const incomeData = { description, amount: numericAmount };
+
+        if (isEditing) {
+            onUpdateIncome({ ...incomeData, id: incomeToEdit.id });
+        } else {
+            onAddIncome(incomeData);
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Editar Receita' : 'Adicionar Receita'}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block mb-1 font-semibold text-slate-300">Descrição</label>
+                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="Ex: Salário, Adiantamento" />
+                </div>
+                <div>
+                    <label className="block mb-1 font-semibold text-slate-300">Valor</label>
+                    <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                </div>
+                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar'}</button>
+            </form>
+        </Modal>
     );
 };
 
