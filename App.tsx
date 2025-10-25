@@ -440,6 +440,65 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
   );
 };
 
+interface InvestmentReportProps {
+    jars: Omit<SavingsJar, 'percentage'>[];
+    midMonthSurplus: number;
+    monthlyPayment: number;
+    midMonthPercentages: Record<string, number>;
+    endOfMonthPercentages: Record<string, number>;
+}
+
+const InvestmentReport: React.FC<InvestmentReportProps> = ({
+    jars,
+    midMonthSurplus,
+    monthlyPayment,
+    midMonthPercentages,
+    endOfMonthPercentages
+}) => {
+    const investmentTotals = useMemo(() => {
+        const totalsByJar = jars.map(jar => {
+            const midMonthAmount = (midMonthSurplus > 0 ? midMonthSurplus : 0) * ((midMonthPercentages[jar.id] || 0) / 100);
+            const endOfMonthAmount = (monthlyPayment > 0 ? monthlyPayment : 0) * ((endOfMonthPercentages[jar.id] || 0) / 100);
+            const total = midMonthAmount + endOfMonthAmount;
+            return {
+                id: jar.id,
+                name: jar.name,
+                total,
+            };
+        });
+
+        const grandTotal = totalsByJar.reduce((acc, item) => acc + item.total, 0);
+
+        return { totalsByJar, grandTotal };
+    }, [jars, midMonthSurplus, monthlyPayment, midMonthPercentages, endOfMonthPercentages]);
+
+    if (investmentTotals.grandTotal <= 0) {
+        return null;
+    }
+
+    return (
+        <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+            <h2 className="text-2xl font-bold text-slate-100 mb-6 text-center">Relatório de Investimentos do Mês</h2>
+            
+            <ul className="space-y-3 mb-6">
+                {investmentTotals.totalsByJar.filter(j => j.total > 0).map(jarTotal => (
+                    <li key={jarTotal.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center transition-all hover:bg-dark-600">
+                        <span className="font-semibold text-slate-300">{jarTotal.name}</span>
+                        <span className="font-bold text-lg text-accent">{formatCurrency(jarTotal.total)}</span>
+                    </li>
+                ))}
+            </ul>
+
+            <hr className="border-dark-600 my-4"/>
+
+            <div className="flex justify-between items-center text-xl mt-4">
+                <span className="font-bold text-slate-100">Total Investido no Mês:</span>
+                <span className="font-extrabold text-2xl text-green-400">{formatCurrency(investmentTotals.grandTotal)}</span>
+            </div>
+        </div>
+    );
+};
+
 const InvestmentsPage: React.FC<{
   jars: Omit<SavingsJar, 'percentage'>[],
   onRemoveJar: (id: string) => void,
@@ -487,72 +546,81 @@ const InvestmentsPage: React.FC<{
     };
 
     return (
-        <div className="mt-2 grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
-            <div className="lg:col-span-3 space-y-8">
-                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Configurar Ganhos para Investimento</h2>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block mb-1 font-semibold text-slate-300">Receita Quinzenal (adiantamento)</label>
-                            <input type="text" inputMode="decimal" value={fortnightlyIncomeInput} onChange={handleFortnightlyIncomeChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="R$ 0,00" />
+        <div className="mt-2 space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+                <div className="lg:col-span-3 space-y-8">
+                    <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-2xl font-bold text-slate-100 mb-4">Configurar Ganhos para Investimento</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block mb-1 font-semibold text-slate-300">Receita Quinzenal (adiantamento)</label>
+                                <input type="text" inputMode="decimal" value={fortnightlyIncomeInput} onChange={handleFortnightlyIncomeChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="R$ 0,00" />
+                            </div>
+                            <div>
+                                <label className="block mb-1 font-semibold text-slate-300">Pagamento Fim de Mês (salário)</label>
+                                <input type="text" inputMode="decimal" value={monthlyPaymentInput} onChange={handleMonthlyPaymentChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="R$ 0,00" />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block mb-1 font-semibold text-slate-300">Pagamento Fim de Mês (salário)</label>
-                            <input type="text" inputMode="decimal" value={monthlyPaymentInput} onChange={handleMonthlyPaymentChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="R$ 0,00" />
+                    </div>
+
+                    <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Quinzenal (Dia 15)</h2>
+                        <div className="space-y-2 text-lg mb-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Receita Quinzenal:</span>
+                                <span className="font-bold text-green-400">{formatCurrency(fortnightlyIncome)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Despesas do Cartão:</span>
+                                <span className="font-bold text-red-400">- {formatCurrency(creditCardExpenses)}</span>
+                            </div>
+                            <hr className="border-dark-700 !my-3"/>
+                            <div className="flex justify-between items-center text-xl">
+                                <span className="text-slate-200">Saldo para investir:</span>
+                                <span className={`font-extrabold ${midMonthSurplus >= 0 ? 'text-blue-400' : 'text-yellow-400'}`}>{formatCurrency(midMonthSurplus)}</span>
+                            </div>
                         </div>
+                        <hr className="border-dark-600 mb-4"/>
+                         <p className="text-slate-400 mb-4 text-center">Distribua o saldo para investir nas suas caixinhas:</p>
+                        <SavingsManager 
+                            jars={jars} 
+                            percentages={midMonthPercentages}
+                            surplus={midMonthSurplus} 
+                            onAddJar={onAddJar} 
+                            onPercentageChange={handlePercentageChange(setMidMonthPercentages)}
+                            onRemoveJar={onRemoveJar} 
+                        />
                     </div>
                 </div>
 
-                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Quinzenal (Dia 15)</h2>
-                    <div className="space-y-2 text-lg mb-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-slate-400">Receita Quinzenal:</span>
-                            <span className="font-bold text-green-400">{formatCurrency(fortnightlyIncome)}</span>
+                <div className="lg:col-span-2">
+                    <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Fim de Mês</h2>
+                         <div className="flex justify-between items-center text-xl">
+                            <span className="text-slate-200">Aporte sugerido:</span>
+                            <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-slate-400">Despesas do Cartão:</span>
-                            <span className="font-bold text-red-400">- {formatCurrency(creditCardExpenses)}</span>
-                        </div>
-                        <hr className="border-dark-700 !my-3"/>
-                        <div className="flex justify-between items-center text-xl">
-                            <span className="text-slate-200">Saldo para investir:</span>
-                            <span className={`font-extrabold ${midMonthSurplus >= 0 ? 'text-blue-400' : 'text-yellow-400'}`}>{formatCurrency(midMonthSurplus)}</span>
-                        </div>
+                        <p className="text-slate-500 mt-2 text-sm">Este é o valor que você configurou como seu pagamento de fim de mês.</p>
+                        <hr className="border-dark-600 my-4"/>
+                        <p className="text-slate-400 mb-4 text-center">Distribua o aporte nas suas caixinhas:</p>
+                        <SavingsManager 
+                            jars={jars}
+                            percentages={endOfMonthPercentages}
+                            surplus={monthlyPayment}
+                            onAddJar={onAddJar}
+                            onPercentageChange={handlePercentageChange(setEndOfMonthPercentages)}
+                            onRemoveJar={onRemoveJar}
+                        />
                     </div>
-                    <hr className="border-dark-600 mb-4"/>
-                     <p className="text-slate-400 mb-4 text-center">Distribua o saldo para investir nas suas caixinhas:</p>
-                    <SavingsManager 
-                        jars={jars} 
-                        percentages={midMonthPercentages}
-                        surplus={midMonthSurplus} 
-                        onAddJar={onAddJar} 
-                        onPercentageChange={handlePercentageChange(setMidMonthPercentages)}
-                        onRemoveJar={onRemoveJar} 
-                    />
                 </div>
             </div>
-
-            <div className="lg:col-span-2">
-                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Planejamento Fim de Mês</h2>
-                     <div className="flex justify-between items-center text-xl">
-                        <span className="text-slate-200">Aporte sugerido:</span>
-                        <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment)}</span>
-                    </div>
-                    <p className="text-slate-500 mt-2 text-sm">Este é o valor que você configurou como seu pagamento de fim de mês.</p>
-                    <hr className="border-dark-600 my-4"/>
-                    <p className="text-slate-400 mb-4 text-center">Distribua o aporte nas suas caixinhas:</p>
-                    <SavingsManager 
-                        jars={jars}
-                        percentages={endOfMonthPercentages}
-                        surplus={monthlyPayment}
-                        onAddJar={onAddJar}
-                        onPercentageChange={handlePercentageChange(setEndOfMonthPercentages)}
-                        onRemoveJar={onRemoveJar}
-                    />
-                </div>
-            </div>
+            <InvestmentReport
+                jars={jars}
+                midMonthSurplus={midMonthSurplus}
+                monthlyPayment={monthlyPayment}
+                midMonthPercentages={midMonthPercentages}
+                endOfMonthPercentages={endOfMonthPercentages}
+            />
         </div>
     );
 };
