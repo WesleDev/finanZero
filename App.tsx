@@ -132,6 +132,7 @@ export default function App() {
         <Header />
         <MonthlyAlert current={currentMonthExpenses} previous={previousMonthExpenses} />
         <Summary income={income} expenses={currentMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
+        <FinancialChart income={income} expenses={currentMonthExpenses} surplus={surplus} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
             <ExpenseManager expenses={expenses} onAddExpense={() => setExpenseModalOpen(true)} onRemoveExpense={removeExpense} />
             <SavingsManager jars={jars} surplus={surplus} onAddJar={() => setJarModalOpen(true)} onUpdateJar={updateJarPercentage} onRemoveJar={removeJar} totalPercentage={totalJarPercentage} />
@@ -201,6 +202,91 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; onS
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Sobra no Mês</h2>
                 <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-3xl font-bold`}>{formatCurrency(surplus)}</p>
+            </div>
+        </div>
+    );
+};
+
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; }> = ({ income, expenses, surplus }) => {
+    if (income <= 0) {
+        return (
+            <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
+                 <h2 className="text-2xl font-bold text-slate-100 mb-4">Distribuição Mensal</h2>
+                 <p className="text-slate-400">Adicione uma receita para ver o gráfico de distribuição.</p>
+            </div>
+        );
+    }
+    
+    const expensesPercentage = (expenses / income) * 100;
+    const surplusPercentage = Math.max(0, (surplus / income) * 100);
+
+    const radius = 80;
+    const circumference = 2 * Math.PI * radius;
+    const expenseStrokeDashoffset = circumference - (expensesPercentage / 100) * circumference;
+    const surplusStrokeDashoffset = 0; // The surplus starts from the beginning
+    
+    const expenseRotation = (surplusPercentage / 100) * 360;
+
+    return (
+        <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8">
+            <h2 className="text-2xl font-bold text-slate-100 mb-4 text-center">Distribuição Mensal</h2>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-8">
+                <div className="relative w-52 h-52">
+                    <svg className="w-full h-full" viewBox="0 0 200 200">
+                        {/* Center Text */}
+                        <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">
+                            Receita Total
+                        </text>
+                        <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">
+                            {formatCurrency(income)}
+                        </text>
+
+                        {/* Chart Rings */}
+                        <circle
+                            cx="100" cy="100" r={radius}
+                            fill="transparent"
+                            strokeWidth="20"
+                            className="text-red-500/20 stroke-current"
+                        />
+                        <circle
+                             cx="100" cy="100" r={radius}
+                             fill="transparent"
+                             strokeWidth="20"
+                             strokeDasharray={circumference}
+                             strokeDashoffset={expenseStrokeDashoffset}
+                             strokeLinecap="round"
+                             transform="rotate(-90 100 100)"
+                             className="text-red-500 stroke-current"
+                        />
+                       
+                         {surplus > 0 && <circle
+                             cx="100" cy="100" r={radius}
+                             fill="transparent"
+                             strokeWidth="20"
+                             strokeDasharray={circumference}
+                             strokeDashoffset={circumference - (surplusPercentage / 100) * circumference}
+                             strokeLinecap="round"
+                             transform={`rotate(${expenseRotation - 90} 100 100)`}
+                             className="text-blue-500 stroke-current"
+                        />}
+                    </svg>
+                </div>
+                <div className="space-y-4">
+                    <div className="flex items-center">
+                        <div className="w-4 h-4 rounded-full bg-red-500 mr-3"></div>
+                        <div>
+                            <p className="text-slate-400">Despesas</p>
+                            <p className="font-bold text-lg text-red-400">{formatCurrency(expenses)}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center">
+                        <div className="w-4 h-4 rounded-full bg-blue-500 mr-3"></div>
+                        <div>
+                            <p className="text-slate-400">Sobra</p>
+                            <p className="font-bold text-lg text-blue-400">{formatCurrency(surplus)}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
