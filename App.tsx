@@ -268,7 +268,13 @@ export default function App() {
         <Header />
         <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
         <Summary income={income} expenses={displayedMonthExpenses} surplus={surplus} onSetIncome={setIncome} />
-        <FinancialChart income={income} expenses={displayedMonthExpenses} surplus={surplus} monthlyExpensesList={displayedMonthExpensesList} />
+        <FinancialChart 
+            income={income} 
+            expenses={displayedMonthExpenses} 
+            surplus={surplus} 
+            monthlyExpensesList={displayedMonthExpensesList}
+            displayedDate={displayedDate}
+        />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
             <ExpenseManager 
               expenses={displayedMonthExpensesList} 
@@ -361,21 +367,39 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; onS
     );
 };
 
-const SubcategoryRanking: React.FC<{ expenses: Expense[] }> = ({ expenses }) => {
+const SubcategoryRanking: React.FC<{ expenses: Expense[]; displayedDate: Date }> = ({ expenses, displayedDate }) => {
     const rankedExpenses = useMemo(() => {
         const expensesBySubcategory: { [key: string]: number } = {};
-        
+
         expenses.forEach(expense => {
             if (expense.subcategory) {
-                const monthlyAmount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
-                expensesBySubcategory[expense.subcategory] = (expensesBySubcategory[expense.subcategory] || 0) + monthlyAmount;
+                let amountToConsider = expense.amount; // Default for non-installments
+
+                if (expense.installments) {
+                    const CARD_CLOSING_DAY = 15;
+                    const firstPaymentDate = new Date(expense.date + 'T00:00:00');
+                    if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+                        firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+                    }
+                    
+                    const firstPaymentMonthYear = getMonthYear(firstPaymentDate);
+                    const displayedMonthYear = getMonthYear(displayedDate);
+                    
+                    if (firstPaymentMonthYear === displayedMonthYear) {
+                        amountToConsider = expense.amount; // First month, use total amount
+                    } else {
+                        amountToConsider = expense.amount / expense.installments.total; // Subsequent months, use monthly amount
+                    }
+                }
+                
+                expensesBySubcategory[expense.subcategory] = (expensesBySubcategory[expense.subcategory] || 0) + amountToConsider;
             }
         });
         
         return Object.entries(expensesBySubcategory)
             .sort(([, amountA], [, amountB]) => amountB - amountA)
             .slice(0, 5);
-    }, [expenses]);
+    }, [expenses, displayedDate]);
     
     if (rankedExpenses.length === 0) {
         return <p className="text-slate-500 text-center md:text-left mt-6">Nenhum gasto com subcategoria para exibir no ranking.</p>;
@@ -397,7 +421,7 @@ const SubcategoryRanking: React.FC<{ expenses: Expense[] }> = ({ expenses }) => 
 };
 
 
-const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[] }> = ({ income, expenses, surplus, monthlyExpensesList }) => {
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[]; displayedDate: Date }> = ({ income, expenses, surplus, monthlyExpensesList, displayedDate }) => {
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
@@ -446,7 +470,7 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
                             </div>
                         </div>
                     </div>
-                    <SubcategoryRanking expenses={monthlyExpensesList} />
+                    <SubcategoryRanking expenses={monthlyExpensesList} displayedDate={displayedDate} />
                 </div>
             </div>
         </div>
