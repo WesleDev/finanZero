@@ -1,0 +1,5 @@
+{
+  "name": "FinanZero - Controle Financeiro Pessoal",
+  "description": "Um aplicativo web para gerenciar suas finanças pessoais, incluindo despesas, receitas, parcelamentos e planejamento de poupança com 'caixinhas' personalizadas.",
+  "requestFramePermissions": []
+}
