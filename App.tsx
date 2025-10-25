@@ -57,6 +57,17 @@ const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
     </svg>
 );
+const EyeIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>
+);
+const EyeOffIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+    </svg>
+);
 
 // --- UTILS & CONSTANTS ---
 const EXPENSE_CATEGORIES = ['Cartão de Crédito', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros'] as const;
@@ -71,7 +82,8 @@ const SUBCATEGORIES: Record<string, string[]> = {
   'Educação': ['Curso', 'Livros', 'Mensalidade', 'Outros'],
 };
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number, isCensored: boolean) => {
+  if (isCensored) return 'R$ ●●●';
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
@@ -119,6 +131,7 @@ export default function App() {
   const [monthlyPayment, setMonthlyPayment] = useLocalStorage<number>('monthlyPayment', 0);
   const [midMonthPercentages, setMidMonthPercentages] = useLocalStorage<Record<string, number>>('midMonthPercentages', {});
   const [endOfMonthPercentages, setEndOfMonthPercentages] = useLocalStorage<Record<string, number>>('endOfMonthPercentages', {});
+  const [isCensored, setIsCensored] = useLocalStorage<boolean>('isCensored', false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -405,19 +418,25 @@ export default function App() {
   return (
     <div className="min-h-screen bg-dark-900 font-sans text-slate-300">
       <main className="container mx-auto p-4 md:p-8">
-        <Header onImport={handleImportClick} onExport={handleExport} />
+        <Header 
+          onImport={handleImportClick} 
+          onExport={handleExport} 
+          isCensored={isCensored} 
+          onToggleCensor={() => setIsCensored(!isCensored)} 
+        />
         <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
         
         {activeTab === 'dashboard' && (
           <div id="dashboard-content">
-            <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} />
-            <Summary income={totalIncome} expenses={displayedMonthExpenses} surplus={surplus} />
+            <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} isCensored={isCensored} />
+            <Summary income={totalIncome} expenses={displayedMonthExpenses} surplus={surplus} isCensored={isCensored} />
             <FinancialChart 
                 income={totalIncome} 
                 expenses={displayedMonthExpenses} 
                 surplus={surplus} 
                 monthlyExpensesList={displayedMonthExpensesList}
                 displayedDate={displayedDate}
+                isCensored={isCensored}
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
                 <div>
@@ -426,6 +445,7 @@ export default function App() {
                         onAddIncome={handleStartAddIncome}
                         onEditIncome={handleStartEditIncome}
                         onRemoveIncome={removeIncome}
+                        isCensored={isCensored}
                      />
                      <div className="mt-8">
                         <ExpenseManager 
@@ -436,6 +456,7 @@ export default function App() {
                           onRemoveExpense={removeExpense}
                           onPreviousMonth={goToPreviousMonth}
                           onNextMonth={goToNextMonth}
+                          isCensored={isCensored}
                         />
                      </div>
                 </div>
@@ -446,6 +467,7 @@ export default function App() {
                     onAddJar={() => setJarModalOpen(true)} 
                     onPercentageChange={updateJarPercentage} 
                     onRemoveJar={removeJar}
+                    isCensored={isCensored}
                 />
             </div>
           </div>
@@ -465,6 +487,7 @@ export default function App() {
             setMidMonthPercentages={setMidMonthPercentages}
             endOfMonthPercentages={endOfMonthPercentages}
             setEndOfMonthPercentages={setEndOfMonthPercentages}
+            isCensored={isCensored}
           />
         )}
       </main>
@@ -496,7 +519,12 @@ export default function App() {
 }
 
 // --- SUB-COMPONENTS ---
-const Header: React.FC<{onImport: () => void, onExport: () => void}> = ({ onImport, onExport }) => (
+const Header: React.FC<{
+  onImport: () => void;
+  onExport: () => void;
+  isCensored: boolean;
+  onToggleCensor: () => void;
+}> = ({ onImport, onExport, isCensored, onToggleCensor }) => (
     <header className="mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center gap-3">
@@ -506,6 +534,13 @@ const Header: React.FC<{onImport: () => void, onExport: () => void}> = ({ onImpo
                 </h1>
             </div>
             <div className="flex items-center gap-2">
+                 <button 
+                   onClick={onToggleCensor} 
+                   title={isCensored ? "Mostrar valores" : "Ocultar valores"} 
+                   className="flex items-center bg-dark-700 hover:bg-dark-600 text-slate-300 font-bold py-2 px-3 rounded-lg transition-colors"
+                 >
+                    {isCensored ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                 </button>
                  <button onClick={onImport} className="flex items-center bg-dark-700 hover:bg-dark-600 text-slate-300 font-bold py-2 px-3 rounded-lg transition-colors">
                     <UploadIcon className="h-5 w-5" />
                     <span className="hidden sm:inline ml-2">Importar</span>
@@ -554,6 +589,7 @@ interface InvestmentReportProps {
     monthlyPayment: number;
     midMonthPercentages: Record<string, number>;
     endOfMonthPercentages: Record<string, number>;
+    isCensored: boolean;
 }
 
 const InvestmentReport: React.FC<InvestmentReportProps> = ({
@@ -561,7 +597,8 @@ const InvestmentReport: React.FC<InvestmentReportProps> = ({
     midMonthSurplus,
     monthlyPayment,
     midMonthPercentages,
-    endOfMonthPercentages
+    endOfMonthPercentages,
+    isCensored
 }) => {
     const investmentTotals = useMemo(() => {
         const totalsByJar = jars.map(jar => {
@@ -592,7 +629,7 @@ const InvestmentReport: React.FC<InvestmentReportProps> = ({
                 {investmentTotals.totalsByJar.filter(j => j.total > 0).map(jarTotal => (
                     <li key={jarTotal.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center transition-all hover:bg-dark-600">
                         <span className="font-semibold text-slate-300">{jarTotal.name}</span>
-                        <span className="font-bold text-lg text-accent">{formatCurrency(jarTotal.total)}</span>
+                        <span className="font-bold text-lg text-accent">{formatCurrency(jarTotal.total, isCensored)}</span>
                     </li>
                 ))}
             </ul>
@@ -601,7 +638,7 @@ const InvestmentReport: React.FC<InvestmentReportProps> = ({
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-lg sm:text-xl mt-4">
                 <span className="font-bold text-slate-100">Total Investido no Mês:</span>
-                <span className="font-extrabold text-xl sm:text-2xl text-green-400">{formatCurrency(investmentTotals.grandTotal)}</span>
+                <span className="font-extrabold text-xl sm:text-2xl text-green-400">{formatCurrency(investmentTotals.grandTotal, isCensored)}</span>
             </div>
         </div>
     );
@@ -620,6 +657,7 @@ interface InvestmentsPageProps {
   setMidMonthPercentages: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   endOfMonthPercentages: Record<string, number>;
   setEndOfMonthPercentages: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  isCensored: boolean;
 }
 
 const InvestmentsPage: React.FC<InvestmentsPageProps> = ({ 
@@ -627,7 +665,8 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
     fortnightlyIncome, setFortnightlyIncome,
     monthlyPayment, setMonthlyPayment,
     midMonthPercentages, setMidMonthPercentages,
-    endOfMonthPercentages, setEndOfMonthPercentages
+    endOfMonthPercentages, setEndOfMonthPercentages,
+    isCensored
 }) => {
     
     const [fortnightlyIncomeInput, setFortnightlyIncomeInput] = useState(fortnightlyIncome > 0 ? fortnightlyIncome.toString().replace('.', ',') : '');
@@ -694,16 +733,16 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
                         <div className="space-y-2 text-lg mb-4">
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-400">Receita Quinzenal:</span>
-                                <span className="font-bold text-green-400">{formatCurrency(fortnightlyIncome)}</span>
+                                <span className="font-bold text-green-400">{formatCurrency(fortnightlyIncome, isCensored)}</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-400">Despesas do Cartão:</span>
-                                <span className="font-bold text-red-400">- {formatCurrency(creditCardExpenses)}</span>
+                                <span className="font-bold text-red-400">- {formatCurrency(creditCardExpenses, isCensored)}</span>
                             </div>
                             <hr className="border-dark-700 !my-3"/>
                             <div className="flex justify-between items-center text-xl">
                                 <span className="text-slate-200">Saldo para investir:</span>
-                                <span className={`font-extrabold ${midMonthSurplus >= 0 ? 'text-blue-400' : 'text-yellow-400'}`}>{formatCurrency(midMonthSurplus)}</span>
+                                <span className={`font-extrabold ${midMonthSurplus >= 0 ? 'text-blue-400' : 'text-yellow-400'}`}>{formatCurrency(midMonthSurplus, isCensored)}</span>
                             </div>
                         </div>
                         <hr className="border-dark-600 mb-4"/>
@@ -715,6 +754,7 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
                             onAddJar={onAddJar} 
                             onPercentageChange={handlePercentageChange(setMidMonthPercentages)}
                             onRemoveJar={onRemoveJar} 
+                            isCensored={isCensored}
                         />
                     </div>
                 </div>
@@ -724,7 +764,7 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
                         <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Planejamento Fim de Mês</h2>
                          <div className="flex justify-between items-center text-xl">
                             <span className="text-slate-200">Aporte sugerido:</span>
-                            <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment)}</span>
+                            <span className="font-extrabold text-green-400">{formatCurrency(monthlyPayment, isCensored)}</span>
                         </div>
                         <p className="text-slate-500 mt-2 text-sm">Este é o valor que você configurou como seu pagamento de fim de mês.</p>
                         <hr className="border-dark-600 my-4"/>
@@ -736,6 +776,7 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
                             onAddJar={onAddJar}
                             onPercentageChange={handlePercentageChange(setEndOfMonthPercentages)}
                             onRemoveJar={onRemoveJar}
+                            isCensored={isCensored}
                         />
                     </div>
                 </div>
@@ -746,13 +787,14 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
                 monthlyPayment={monthlyPayment}
                 midMonthPercentages={midMonthPercentages}
                 endOfMonthPercentages={endOfMonthPercentages}
+                isCensored={isCensored}
             />
         </div>
     );
 };
 
 
-const MonthlyAlert: React.FC<{ current: number; previous: number }> = ({ current, previous }) => {
+const MonthlyAlert: React.FC<{ current: number; previous: number; isCensored: boolean }> = ({ current, previous, isCensored }) => {
     if (previous === 0 && current > 0) {
         return <div className="bg-yellow-500/20 text-yellow-300 p-4 rounded-lg mb-6 flex items-center"><TrendingUpIcon/> Primeiro mês com gastos registrados. Mantenha o controle!</div>;
     }
@@ -760,34 +802,34 @@ const MonthlyAlert: React.FC<{ current: number; previous: number }> = ({ current
 
     const difference = current - previous;
     if (difference > 0) {
-        return <div className="bg-danger/20 text-red-400 p-4 rounded-lg mb-6 flex items-center"><TrendingUpIcon /> Seus gastos aumentaram em {formatCurrency(difference)} este mês.</div>;
+        return <div className="bg-danger/20 text-red-400 p-4 rounded-lg mb-6 flex items-center"><TrendingUpIcon /> Seus gastos aumentaram em {formatCurrency(difference, isCensored)} este mês.</div>;
     } else if (difference < 0) {
-        return <div className="bg-success/20 text-green-400 p-4 rounded-lg mb-6 flex items-center"><TrendingDownIcon/> Ótimo! Seus gastos diminuíram em {formatCurrency(Math.abs(difference))} este mês.</div>;
+        return <div className="bg-success/20 text-green-400 p-4 rounded-lg mb-6 flex items-center"><TrendingDownIcon/> Ótimo! Seus gastos diminuíram em {formatCurrency(Math.abs(difference), isCensored)} este mês.</div>;
     } else {
         return <div className="bg-blue-500/20 text-blue-400 p-4 rounded-lg mb-6 flex items-center"><MinusCircleIcon /> Seus gastos se mantiveram estáveis este mês.</div>;
     }
 };
 
-const Summary: React.FC<{ income: number; expenses: number; surplus: number; }> = ({ income, expenses, surplus }) => {
+const Summary: React.FC<{ income: number; expenses: number; surplus: number; isCensored: boolean }> = ({ income, expenses, surplus, isCensored }) => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Receita Mensal</h2>
-                <p className="text-green-400 text-2xl sm:text-3xl font-bold">{formatCurrency(income)}</p>
+                <p className="text-green-400 text-2xl sm:text-3xl font-bold">{formatCurrency(income, isCensored)}</p>
             </div>
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Gastos do Mês</h2>
-                <p className="text-red-400 text-2xl sm:text-3xl font-bold">{formatCurrency(expenses)}</p>
+                <p className="text-red-400 text-2xl sm:text-3xl font-bold">{formatCurrency(expenses, isCensored)}</p>
             </div>
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-slate-400 text-lg">Sobra no Mês</h2>
-                <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-2xl sm:text-3xl font-bold`}>{formatCurrency(surplus)}</p>
+                <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-2xl sm:text-3xl font-bold`}>{formatCurrency(surplus, isCensored)}</p>
             </div>
         </div>
     );
 };
 
-const SubcategoryRanking: React.FC<{ expenses: Expense[]; displayedDate: Date }> = ({ expenses, displayedDate }) => {
+const SubcategoryRanking: React.FC<{ expenses: Expense[]; displayedDate: Date; isCensored: boolean }> = ({ expenses, displayedDate, isCensored }) => {
     const rankedExpenses = useMemo(() => {
         const expensesBySubcategory: { [key: string]: number } = {};
 
@@ -832,7 +874,7 @@ const SubcategoryRanking: React.FC<{ expenses: Expense[]; displayedDate: Date }>
                 {rankedExpenses.map(([subcategory, total]) => (
                     <li key={subcategory} className="flex justify-between items-center text-sm">
                         <span className="text-slate-400">{subcategory}</span>
-                        <span className="font-bold text-slate-200">{formatCurrency(total)}</span>
+                        <span className="font-bold text-slate-200">{formatCurrency(total, isCensored)}</span>
                     </li>
                 ))}
             </ul>
@@ -841,7 +883,7 @@ const SubcategoryRanking: React.FC<{ expenses: Expense[]; displayedDate: Date }>
 };
 
 
-const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[]; displayedDate: Date }> = ({ income, expenses, surplus, monthlyExpensesList, displayedDate }) => {
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[]; displayedDate: Date; isCensored: boolean }> = ({ income, expenses, surplus, monthlyExpensesList, displayedDate, isCensored }) => {
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
@@ -867,7 +909,7 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
                 <div className="relative w-48 h-48 sm:w-52 sm:h-52 mx-auto">
                     <svg className="w-full h-full" viewBox="0 0 200 200">
                         <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
-                        <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income)}</text>
+                        <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income, isCensored)}</text>
                         <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-red-500/20 stroke-current" />
                         <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" strokeDasharray={circumference} strokeDashoffset={expenseStrokeDashoffset} strokeLinecap="round" transform="rotate(-90 100 100)" className="text-red-500 stroke-current" />
                         {surplus > 0 && <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" strokeDasharray={circumference} strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} strokeLinecap="round" transform={`rotate(${expenseRotation - 90} 100 100)`} className="text-blue-500 stroke-current" />}
@@ -879,18 +921,18 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
                             <div className="w-4 h-4 rounded-full bg-red-500 mr-3"></div>
                             <div>
                                 <p className="text-slate-400">Despesas</p>
-                                <p className="font-bold text-lg text-red-400">{formatCurrency(expenses)}</p>
+                                <p className="font-bold text-lg text-red-400">{formatCurrency(expenses, isCensored)}</p>
                             </div>
                         </div>
                         <div className="flex items-center">
                             <div className="w-4 h-4 rounded-full bg-blue-500 mr-3"></div>
                             <div>
                                 <p className="text-slate-400">Sobra</p>
-                                <p className="font-bold text-lg text-blue-400">{formatCurrency(surplus)}</p>
+                                <p className="font-bold text-lg text-blue-400">{formatCurrency(surplus, isCensored)}</p>
                             </div>
                         </div>
                     </div>
-                    <SubcategoryRanking expenses={monthlyExpensesList} displayedDate={displayedDate} />
+                    <SubcategoryRanking expenses={monthlyExpensesList} displayedDate={displayedDate} isCensored={isCensored} />
                 </div>
             </div>
         </div>
@@ -902,9 +944,10 @@ interface IncomeManagerProps {
   onAddIncome: () => void;
   onEditIncome: (income: Income) => void;
   onRemoveIncome: (id: string) => void;
+  isCensored: boolean;
 }
 
-const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onEditIncome, onRemoveIncome }) => {
+const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onEditIncome, onRemoveIncome, isCensored }) => {
   return (
     <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
         <div className="flex justify-between items-center mb-4">
@@ -923,7 +966,7 @@ const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onE
                         <li key={inc.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                             <p className="font-semibold self-start">{inc.description}</p>
                             <div className="flex items-center self-end sm:self-center">
-                                <p className="font-bold text-green-400 mr-4">{formatCurrency(inc.amount)}</p>
+                                <p className="font-bold text-green-400 mr-4">{formatCurrency(inc.amount, isCensored)}</p>
                                 <button onClick={() => onEditIncome(inc)} className="text-slate-500 hover:text-accent p-1">
                                     <EditIcon />
                                 </button>
@@ -948,9 +991,10 @@ interface ExpenseManagerProps {
   onRemoveExpense: (id: string) => void;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
+  isCensored: boolean;
 }
 
-const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth }) => {
+const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth, isCensored }) => {
   const monthYearDisplay = displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     
   return (
@@ -1011,7 +1055,7 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                                 </div>
                                 <div className="flex items-center self-end sm:self-center">
                                     <p className="font-bold text-red-400 mr-4">
-                                        {formatCurrency(exp.installments ? exp.amount / exp.installments.total : exp.amount)}
+                                        {formatCurrency(exp.installments ? exp.amount / exp.installments.total : exp.amount, isCensored)}
                                     </p>
                                     <button onClick={() => onEditExpense(exp)} className="text-slate-500 hover:text-accent p-1">
                                         <EditIcon />
@@ -1036,8 +1080,9 @@ const SavingsManager: React.FC<{
     surplus: number, 
     onAddJar: () => void, 
     onPercentageChange: (id: string, p: number) => void, 
-    onRemoveJar: (id: string) => void 
-}> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar }) => {
+    onRemoveJar: (id: string) => void,
+    isCensored: boolean
+}> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar, isCensored }) => {
     
     const totalPercentage = useMemo(() => {
         return jars.reduce((acc, jar) => acc + (percentages[jar.id] || 0), 0);
@@ -1081,7 +1126,7 @@ const SavingsManager: React.FC<{
                                             </button>
                                         </div>
                                     </div>
-                                    <p className="text-accent font-bold mt-1 text-right sm:text-left">{formatCurrency((surplus * percentage) / 100)}</p>
+                                    <p className="text-accent font-bold mt-1 text-right sm:text-left">{formatCurrency((surplus * percentage) / 100, isCensored)}</p>
                                 </li>
                             )
                         })}
