@@ -99,7 +99,7 @@ const getMonthYear = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
 
-// --- MODAL COMPONENT ---
+// --- MODAL COMPONENTS ---
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -122,6 +122,44 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
   );
 };
 
+interface ConfirmationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+}
+
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
+  if (!isOpen) return null;
+
+  const handleConfirm = () => {
+    onConfirm();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4" onClick={onClose}>
+      <div className="bg-dark-800 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-dark-700">
+          <h3 className="text-xl font-bold text-slate-100">{title}</h3>
+        </div>
+        <div className="p-6">
+          <p className="text-slate-300">{message}</p>
+        </div>
+        <div className="p-4 bg-dark-700/50 flex justify-end gap-4 rounded-b-lg">
+          <button onClick={onClose} className="bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors">
+            Cancelar
+          </button>
+          <button onClick={handleConfirm} className="bg-danger hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+            Excluir
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- APP COMPONENT ---
 export default function App() {
   const [incomes, setIncomes] = useLocalStorage<Income[]>('incomes', []);
@@ -132,6 +170,18 @@ export default function App() {
   const [midMonthPercentages, setMidMonthPercentages] = useLocalStorage<Record<string, number>>('midMonthPercentages', {});
   const [endOfMonthPercentages, setEndOfMonthPercentages] = useLocalStorage<Record<string, number>>('endOfMonthPercentages', {});
   const [isCensored, setIsCensored] = useLocalStorage<boolean>('isCensored', false);
+
+  const [confirmation, setConfirmation] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -257,7 +307,14 @@ export default function App() {
   };
     
   const removeIncome = (id: string) => {
-    setIncomes(incomes.filter(i => i.id !== id));
+    const incomeToDelete = incomes.find(i => i.id === id);
+    if (!incomeToDelete) return;
+    setConfirmation({
+      isOpen: true,
+      title: 'Confirmar Exclusão de Receita',
+      message: `Tem certeza que deseja excluir a receita "${incomeToDelete.description}"? Esta ação não pode ser desfeita.`,
+      onConfirm: () => setIncomes(currentIncomes => currentIncomes.filter(i => i.id !== id)),
+    });
   };
   
   const handleStartAddIncome = () => {
@@ -288,7 +345,14 @@ export default function App() {
   };
     
   const removeExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
+    const expenseToDelete = expenses.find(e => e.id === id);
+    if (!expenseToDelete) return;
+    setConfirmation({
+      isOpen: true,
+      title: 'Confirmar Exclusão de Despesa',
+      message: `Tem certeza que deseja excluir a despesa "${expenseToDelete.description}"? Esta ação não pode ser desfeita.`,
+      onConfirm: () => setExpenses(currentExpenses => currentExpenses.filter(e => e.id !== id)),
+    });
   };
     
   const handleStartAddExpense = () => {
@@ -326,7 +390,14 @@ export default function App() {
   };
     
   const removeJar = (id: string) => {
-    setJars(jars.filter(j => j.id !== id));
+    const jarToDelete = jars.find(j => j.id === id);
+    if (!jarToDelete) return;
+    setConfirmation({
+      isOpen: true,
+      title: 'Confirmar Exclusão de Caixinha',
+      message: `Tem certeza que deseja excluir a caixinha "${jarToDelete.name}"? Esta ação não pode ser desfeita.`,
+      onConfirm: () => setJars(currentJars => currentJars.filter(j => j.id !== id)),
+    });
   };
   
   // --- NAVIGATION ---
@@ -507,6 +578,13 @@ export default function App() {
         expenseToEdit={editingExpense}
       />
       <JarModal isOpen={isJarModalOpen} onClose={() => setJarModalOpen(false)} onAddJar={addJar} />
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={() => setConfirmation({ ...confirmation, isOpen: false })}
+        onConfirm={confirmation.onConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+      />
       <input 
         type="file"
         ref={fileInputRef}
