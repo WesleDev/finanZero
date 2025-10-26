@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -73,6 +74,12 @@ const EyeOffIcon: React.FC<{ className?: string }> = ({ className }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
     </svg>
 );
+const CreditCardIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+);
+
 
 // --- UTILS & CONSTANTS ---
 const EXPENSE_CATEGORIES = ['Cartão de Crédito', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros'] as const;
@@ -505,7 +512,21 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <div id="dashboard-content">
             <MonthlyAlert current={displayedMonthExpenses} previous={previousMonthExpenses} isCensored={isCensored} />
-            <Summary income={totalIncome} expenses={displayedMonthExpenses} surplus={surplus} isCensored={isCensored} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-slate-400 text-lg">Receita Mensal</h2>
+                    <p className="text-green-400 text-2xl sm:text-3xl font-bold">{formatCurrency(totalIncome, isCensored)}</p>
+                </div>
+                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-slate-400 text-lg">Gastos do Mês</h2>
+                    <p className="text-red-400 text-2xl sm:text-3xl font-bold">{formatCurrency(displayedMonthExpenses, isCensored)}</p>
+                </div>
+                <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-slate-400 text-lg">Sobra no Mês</h2>
+                    <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-2xl sm:text-3xl font-bold`}>{formatCurrency(surplus, isCensored)}</p>
+                </div>
+                <CreditCardSummary expenses={expenses} displayedDate={displayedDate} isCensored={isCensored} />
+            </div>
             <FinancialChart 
                 income={totalIncome} 
                 expenses={displayedMonthExpenses} 
@@ -892,20 +913,98 @@ const MonthlyAlert: React.FC<{ current: number; previous: number; isCensored: bo
     }
 };
 
-const Summary: React.FC<{ income: number; expenses: number; surplus: number; isCensored: boolean }> = ({ income, expenses, surplus, isCensored }) => {
+const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, isCensored: boolean }> = ({ expenses, displayedDate, isCensored }) => {
+    const CARD_CLOSING_DAY = 15;
+
+    const { currentBill, futureDebt, totalDebt } = useMemo(() => {
+        const creditCardExpenses = expenses.filter(e => e.category === 'Cartão de Crédito');
+        
+        // Calculate Current Bill
+        const displayedMonthKey = getMonthYear(displayedDate);
+        const currentBillExpenses = creditCardExpenses.filter(expense => {
+            if (expense.isRecurring) {
+                const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+                if (effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+                    effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+                }
+                const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
+                return effectiveStartMonthYear <= displayedMonthKey;
+            }
+
+            if (expense.installments) {
+                const firstPaymentDate = new Date(expense.date + 'T00:00:00');
+                if (firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+                    firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+                }
+                for (let i = 0; i < expense.installments.total; i++) {
+                    const installmentDate = new Date(firstPaymentDate);
+                    installmentDate.setMonth(firstPaymentDate.getMonth() + i);
+                    if (getMonthYear(installmentDate) === displayedMonthKey) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            const effectiveDate = new Date(expense.date + 'T00:00:00');
+            if (effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+                effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+            }
+            return getMonthYear(effectiveDate) === displayedMonthKey;
+        });
+
+        const currentBill = currentBillExpenses.reduce((acc, exp) => {
+            const amount = exp.installments ? exp.amount / exp.installments.total : exp.amount;
+            return acc + amount;
+        }, 0);
+
+        // Calculate Future Debt from installments
+        const installmentExpenses = creditCardExpenses.filter(e => e.installments);
+        const futureDebt = installmentExpenses.reduce((totalFutureDebt, expense) => {
+            const installmentAmount = expense.amount / expense.installments!.total;
+            
+            const firstPaymentDate = new Date(expense.date + 'T00:00:00');
+            if (firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+                firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+            }
+
+            const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
+            
+            const paidInstallments = monthsDiff < 0 ? 0 : monthsDiff + 1;
+
+            if (paidInstallments >= expense.installments!.total) {
+                return totalFutureDebt;
+            }
+            
+            const remainingInstallments = expense.installments!.total - paidInstallments;
+            
+            return totalFutureDebt + (remainingInstallments * installmentAmount);
+        }, 0);
+        
+        const totalDebt = currentBill + futureDebt;
+
+        return { currentBill, futureDebt, totalDebt };
+    }, [expenses, displayedDate]);
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                <h2 className="text-slate-400 text-lg">Receita Mensal</h2>
-                <p className="text-green-400 text-2xl sm:text-3xl font-bold">{formatCurrency(income, isCensored)}</p>
+        <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
+            <div className="flex items-center gap-2">
+                 <h2 className="text-slate-400 text-lg">Cartão de Crédito</h2>
             </div>
-            <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                <h2 className="text-slate-400 text-lg">Gastos do Mês</h2>
-                <p className="text-red-400 text-2xl sm:text-3xl font-bold">{formatCurrency(expenses, isCensored)}</p>
-            </div>
-            <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
-                <h2 className="text-slate-400 text-lg">Sobra no Mês</h2>
-                <p className={`${surplus >= 0 ? 'text-blue-400' : 'text-yellow-400'} text-2xl sm:text-3xl font-bold`}>{formatCurrency(surplus, isCensored)}</p>
+            <div className="space-y-1 mt-2">
+                <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-slate-400">Fatura Atual</span>
+                    <span className="font-bold text-lg text-amber-400">{formatCurrency(currentBill, isCensored)}</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-slate-400">Dívida Futura</span>
+                    <span className="font-bold text-lg text-red-400">{formatCurrency(futureDebt, isCensored)}</span>
+                </div>
+                <hr className="border-dark-700 !my-2"/>
+                <div className="flex justify-between items-baseline">
+                    <span className="text-slate-200 font-bold">Dívida Total</span>
+                    <span className="font-extrabold text-2xl text-danger">{formatCurrency(totalDebt, isCensored)}</span>
+                </div>
             </div>
         </div>
     );
