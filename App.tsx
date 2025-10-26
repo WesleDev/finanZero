@@ -958,64 +958,74 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
             .sort((a, b) => b.value - a.value);
     }, [expenses, totalExpenses]);
 
-    if (categoryData.length === 0) {
-        return <p className="text-slate-500 text-center mt-6">Nenhum gasto para exibir no gráfico.</p>;
-    }
-
     let cumulativeAngle = 0;
 
     return (
-        <div className="mt-6">
-            <h3 className="text-lg font-bold text-slate-300 mb-4">Gastos por Categoria</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                <div className="relative w-40 h-40 mx-auto">
-                    <svg viewBox="0 0 200 200">
-                        {categoryData.map((slice) => {
-                            const percentage = (slice.value / totalExpenses) * 100;
-                            const startAngle = cumulativeAngle;
-                            const endAngle = cumulativeAngle + (percentage / 100) * 360;
-                            const pathData = describeDonutArc(100, 100, 100, 70, startAngle, endAngle);
-                            cumulativeAngle = endAngle;
+        <div className="w-full">
+            <h3 className="text-lg font-bold text-slate-300 mb-4 text-center lg:text-left">Gastos por Categoria</h3>
+            {categoryData.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">Nenhum gasto para exibir.</p>
+            ) : (
+                <div className="flex flex-col sm:flex-row gap-6 items-center">
+                    <div className="relative w-40 h-40 mx-auto flex-shrink-0">
+                        <svg viewBox="0 0 200 200">
+                            {categoryData.map((slice) => {
+                                const percentage = (slice.value / totalExpenses) * 100;
+                                const startAngle = cumulativeAngle;
+                                const endAngle = cumulativeAngle + (percentage / 100) * 360;
+                                const pathData = describeDonutArc(100, 100, 100, 70, startAngle, endAngle);
+                                cumulativeAngle = endAngle;
 
-                            const isSliceActive = activeSlice === slice.name;
+                                const isSliceActive = activeSlice === slice.name;
 
-                            return (
-                                <g 
-                                    key={slice.name} 
-                                    onMouseEnter={() => setActiveSlice(slice.name)}
-                                    onMouseLeave={() => setActiveSlice(null)}
-                                >
-                                    <path 
-                                        d={pathData} 
-                                        fill={slice.color} 
-                                        className="transition-transform duration-200"
-                                        style={{ transform: isSliceActive ? 'scale(1.05)' : 'scale(1)', transformOrigin: 'center center' }}
-                                    />
-                                </g>
-                            );
-                        })}
-                    </svg>
-                    {activeSlice && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                            <p className="text-sm text-slate-300 break-words px-2">{activeSlice}</p>
-                            <p className="font-bold text-lg text-white">
-                                {formatCurrency(categoryData.find(d => d.name === activeSlice)?.value || 0, isCensored)}
-                            </p>
-                        </div>
-                    )}
+                                return (
+                                    <g 
+                                        key={slice.name} 
+                                        onMouseEnter={() => setActiveSlice(slice.name)}
+                                        onMouseLeave={() => setActiveSlice(null)}
+                                    >
+                                        <path 
+                                            d={pathData} 
+                                            fill={slice.color} 
+                                            className="transition-transform duration-200"
+                                            style={{ transform: isSliceActive ? 'scale(1.05)' : 'scale(1)', transformOrigin: 'center center' }}
+                                        />
+                                    </g>
+                                );
+                            })}
+                        </svg>
+                        {activeSlice ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                                <p className="text-sm text-slate-300 break-words px-2">{activeSlice}</p>
+                                <p className="font-bold text-lg text-white">
+                                    {formatCurrency(categoryData.find(d => d.name === activeSlice)?.value || 0, isCensored)}
+                                </p>
+                            </div>
+                        ) : (
+                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                                <p className="text-sm text-slate-400">Passe o mouse</p>
+                                <p className="text-sm text-slate-400">para ver</p>
+                            </div>
+                        )}
+                    </div>
+                    <ul className="w-full space-y-1 text-sm self-center sm:self-start max-h-48 overflow-y-auto pr-2">
+                        {categoryData.map(slice => (
+                            <li key={slice.name} 
+                                className="flex items-center justify-between gap-2 p-1 rounded transition-colors cursor-pointer"
+                                onMouseEnter={() => setActiveSlice(slice.name)}
+                                onMouseLeave={() => setActiveSlice(null)}
+                                style={{ backgroundColor: activeSlice === slice.name ? 'rgba(255, 255, 255, 0.05)' : 'transparent' }}
+                            >
+                               <div className="flex items-center gap-2 truncate">
+                                 <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
+                                 <span className="truncate">{slice.name}</span>
+                               </div>
+                               <span className="font-bold">{((slice.value / totalExpenses) * 100).toFixed(1)}%</span>
+                            </li>
+                        ))}
+                    </ul>
                 </div>
-                <ul className="space-y-1 text-sm self-start max-h-36 overflow-y-auto">
-                    {categoryData.map(slice => (
-                        <li key={slice.name} className="flex items-center justify-between gap-2">
-                           <div className="flex items-center gap-2 truncate">
-                             <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
-                             <span className="truncate">{slice.name}</span>
-                           </div>
-                           <span className="font-bold">{((slice.value / totalExpenses) * 100).toFixed(1)}%</span>
-                        </li>
-                    ))}
-                </ul>
-            </div>
+            )}
         </div>
     );
 };
@@ -1025,7 +1035,7 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
-                 <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Distribuição Mensal</h2>
+                 <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Visão Geral do Mês</h2>
                  <p className="text-slate-400">Adicione uma receita para ver o gráfico de distribuição.</p>
             </div>
         );
@@ -1036,40 +1046,61 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
 
     const radius = 80;
     const circumference = 2 * Math.PI * radius;
-    const expenseStrokeDashoffset = circumference - (expensesPercentage / 100) * circumference;
     
-    const expenseRotation = (surplusPercentage / 100) * 360;
+    const surplusRotation = (surplusPercentage / 100) * 360;
 
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4 text-center">Visão Geral do Mês</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="relative w-48 h-48 sm:w-52 sm:h-52 mx-auto">
-                    <svg className="w-full h-full" viewBox="0 0 200 200">
-                        <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
-                        <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income, isCensored)}</text>
-                        <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-red-500/20 stroke-current" />
-                        <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" strokeDasharray={circumference} strokeDashoffset={expenseStrokeDashoffset} strokeLinecap="round" transform="rotate(-90 100 100)" className="text-red-500 stroke-current" />
-                        {surplus > 0 && <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" strokeDasharray={circumference} strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} strokeLinecap="round" transform={`rotate(${expenseRotation - 90} 100 100)`} className="text-blue-500 stroke-current" />}
-                    </svg>
-                </div>
-                <div>
-                    <div className="space-y-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-6 text-center">Visão Geral do Mês</h2>
+            <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-center justify-around">
+
+                {/* Overall Summary Section */}
+                <div className="flex flex-col items-center gap-4 flex-shrink-0">
+                    <div className="relative w-48 h-48 sm:w-52 sm:h-52">
+                         <svg className="w-full h-full" viewBox="0 0 200 200">
+                            <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
+                            <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income, isCensored)}</text>
+                            
+                            <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-blue-500/10 stroke-current" />
+                            
+                            {surplus > 0 && 
+                                <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
+                                    strokeDasharray={circumference} 
+                                    strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} 
+                                    strokeLinecap="round" 
+                                    transform="rotate(-90 100 100)" 
+                                    className="text-blue-500 stroke-current" />
+                            }
+
+                            <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
+                                strokeDasharray={circumference} 
+                                strokeDashoffset={circumference - (expensesPercentage / 100) * circumference} 
+                                strokeLinecap="round" 
+                                transform={`rotate(${(surplus > 0 ? surplusRotation : 0) - 90} 100 100)`}
+                                className="text-red-500 stroke-current" />
+                        </svg>
+                    </div>
+                    <div className="flex justify-center gap-6">
                         <div className="flex items-center">
-                            <div className="w-4 h-4 rounded-full bg-red-500 mr-3"></div>
+                            <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
                             <div>
-                                <p className="text-slate-400">Despesas</p>
-                                <p className="font-bold text-lg text-red-400">{formatCurrency(expenses, isCensored)}</p>
+                                <p className="text-slate-400 text-sm">Despesas</p>
+                                <p className="font-bold text-base text-red-400">{formatCurrency(expenses, isCensored)}</p>
                             </div>
                         </div>
                         <div className="flex items-center">
-                            <div className="w-4 h-4 rounded-full bg-blue-500 mr-3"></div>
+                            <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
                             <div>
-                                <p className="text-slate-400">Sobra</p>
-                                <p className="font-bold text-lg text-blue-400">{formatCurrency(surplus, isCensored)}</p>
+                                <p className="text-slate-400 text-sm">Sobra</p>
+                                <p className="font-bold text-base text-blue-400">{formatCurrency(surplus, isCensored)}</p>
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div className="w-full h-px lg:w-px lg:h-auto bg-dark-700 self-stretch"></div>
+
+                <div className="w-full lg:max-w-md">
                     <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
                 </div>
             </div>
