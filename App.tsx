@@ -36,6 +36,11 @@ const ChevronLeftIcon: React.FC = () => (
 const ChevronRightIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
 );
+const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-5 w-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+  </svg>
+);
 const CurrencyDollarIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01M12 6v-1m0-1V4m0 2.01M12 18v-1m0-1v-1m0 0v-1m0 0V9.99M12 18h.01M12 21a9 9 0 110-18 9 9 0 010 18z" />
@@ -940,6 +945,7 @@ const describeDonutArc = (x: number, y: number, outerRadius: number, innerRadius
 
 const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: number; isCensored: boolean }> = ({ expenses, totalExpenses, isCensored }) => {
     const [activeSlice, setActiveSlice] = useState<string | null>(null);
+    const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
 
     const COLORS = ['#3b82f6', '#16a34a', '#facc15', '#ef4444', '#8b5cf6', '#ec4899', '#10b981', '#f97316', '#64748b'];
 
@@ -957,6 +963,33 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
             .map(([name, value], index) => ({ name, value, color: COLORS[index % COLORS.length] }))
             .sort((a, b) => b.value - a.value);
     }, [expenses, totalExpenses]);
+
+    const expensesBySubcategory = useMemo(() => {
+        const result: Record<string, { name: string; value: number }[]> = {};
+        categoryData.forEach(cat => {
+          const subcategories = expenses
+            .filter(e => e.category === cat.name)
+            .reduce((acc, expense) => {
+              const subcatName = expense.subcategory || 'Outros';
+              const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
+              acc[subcatName] = (acc[subcatName] || 0) + amount;
+              return acc;
+            }, {} as Record<string, number>);
+            
+          result[cat.name] = Object.entries(subcategories)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+        });
+        return result;
+    }, [expenses, categoryData]);
+
+    const handleToggleCategory = (categoryName: string) => {
+      setExpandedCategories(prev => 
+        prev.includes(categoryName) 
+          ? prev.filter(c => c !== categoryName)
+          : [...prev, categoryName]
+      );
+    };
 
     let cumulativeAngle = 0;
 
@@ -1009,20 +1042,43 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
                         )}
                     </div>
                     <ul className="w-full space-y-1 text-sm self-center sm:self-start max-h-48 overflow-y-auto pr-2">
-                        {categoryData.map(slice => (
-                            <li key={slice.name} 
-                                className="flex items-center justify-between gap-2 p-1 rounded transition-colors cursor-pointer"
-                                onMouseEnter={() => setActiveSlice(slice.name)}
-                                onMouseLeave={() => setActiveSlice(null)}
-                                style={{ backgroundColor: activeSlice === slice.name ? 'rgba(255, 255, 255, 0.05)' : 'transparent' }}
-                            >
-                               <div className="flex items-center gap-2 truncate">
-                                 <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
-                                 <span className="truncate">{slice.name}</span>
-                               </div>
-                               <span className="font-bold">{((slice.value / totalExpenses) * 100).toFixed(1)}%</span>
-                            </li>
-                        ))}
+                        {categoryData.map(slice => {
+                             const isExpanded = expandedCategories.includes(slice.name);
+                             const subcategories = expensesBySubcategory[slice.name] || [];
+                             const hasSubcategories = subcategories.length > 1 || (subcategories.length === 1 && subcategories[0].name !== 'Outros');
+                            return (
+                                <React.Fragment key={slice.name}>
+                                    <li
+                                        className="flex items-center justify-between gap-2 p-1 rounded transition-colors"
+                                        style={{ backgroundColor: activeSlice === slice.name ? 'rgba(255, 255, 255, 0.05)' : 'transparent', cursor: hasSubcategories ? 'pointer' : 'default' }}
+                                        onMouseEnter={() => setActiveSlice(slice.name)}
+                                        onMouseLeave={() => setActiveSlice(null)}
+                                        onClick={() => hasSubcategories && handleToggleCategory(slice.name)}
+                                    >
+                                    <div className="flex items-center gap-2 truncate">
+                                        <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
+                                        <span className="truncate">{slice.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold">{((slice.value / totalExpenses) * 100).toFixed(1)}%</span>
+                                        {hasSubcategories && (
+                                            <ChevronDownIcon className={`h-4 w-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                        )}
+                                    </div>
+                                    </li>
+                                     {isExpanded && hasSubcategories && (
+                                      <ul className="pl-8 pr-2 pt-1 pb-2 space-y-1 text-xs">
+                                        {subcategories.map(sub => (
+                                          <li key={sub.name} className="flex justify-between items-center text-slate-400">
+                                            <span>- {sub.name}</span>
+                                            <span className="font-medium">{formatCurrency(sub.value, isCensored)}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                </React.Fragment>
+                            )
+                        })}
                     </ul>
                 </div>
             )}
