@@ -506,7 +506,6 @@ export default function App() {
                 expenses={displayedMonthExpenses} 
                 surplus={surplus} 
                 monthlyExpensesList={displayedMonthExpensesList}
-                displayedDate={displayedDate}
                 isCensored={isCensored}
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
@@ -907,61 +906,122 @@ const Summary: React.FC<{ income: number; expenses: number; surplus: number; isC
     );
 };
 
-const SubcategoryRanking: React.FC<{ expenses: Expense[]; displayedDate: Date; isCensored: boolean }> = ({ expenses, displayedDate, isCensored }) => {
-    const rankedExpenses = useMemo(() => {
-        const expensesBySubcategory: { [key: string]: number } = {};
+// Helper functions for SVG Arc
+const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
+    const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+    return {
+        x: centerX + (radius * Math.cos(angleInRadians)),
+        y: centerY + (radius * Math.sin(angleInRadians))
+    };
+};
 
-        expenses.forEach(expense => {
-            if (expense.subcategory) {
-                let amountToConsider = expense.amount; // Default for non-installments
-
-                if (expense.installments) {
-                    const CARD_CLOSING_DAY = 15;
-                    const firstPaymentDate = new Date(expense.date + 'T00:00:00');
-                    if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-                        firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
-                    }
-                    
-                    const firstPaymentMonthYear = getMonthYear(firstPaymentDate);
-                    const displayedMonthYear = getMonthYear(displayedDate);
-                    
-                    if (firstPaymentMonthYear === displayedMonthYear) {
-                        amountToConsider = expense.amount; // First month, use total amount
-                    } else {
-                        amountToConsider = expense.amount / expense.installments.total; // Subsequent months, use monthly amount
-                    }
-                }
-                
-                expensesBySubcategory[expense.subcategory] = (expensesBySubcategory[expense.subcategory] || 0) + amountToConsider;
-            }
-        });
-        
-        return Object.entries(expensesBySubcategory)
-            .sort(([, amountA], [, amountB]) => amountB - amountA)
-            .slice(0, 5);
-    }, [expenses, displayedDate]);
-    
-    if (rankedExpenses.length === 0) {
-        return <p className="text-slate-500 text-center md:text-left mt-6">Nenhum gasto com subcategoria para exibir no ranking.</p>;
+const describeDonutArc = (x: number, y: number, outerRadius: number, innerRadius: number, startAngle: number, endAngle: number) => {
+    if (endAngle - startAngle >= 360) {
+      endAngle = 359.99;
     }
+    const start = polarToCartesian(x, y, outerRadius, endAngle);
+    const end = polarToCartesian(x, y, outerRadius, startAngle);
+    
+    const startInner = polarToCartesian(x, y, innerRadius, endAngle);
+    const endInner = polarToCartesian(x, y, innerRadius, startAngle);
+
+    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+    const d = [
+        "M", start.x, start.y,
+        "A", outerRadius, outerRadius, 0, largeArcFlag, 0, end.x, end.y,
+        "L", endInner.x, endInner.y,
+        "A", innerRadius, innerRadius, 0, largeArcFlag, 1, startInner.x, startInner.y,
+        "Z"
+    ].join(" ");
+
+    return d;
+};
+
+const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: number; isCensored: boolean }> = ({ expenses, totalExpenses, isCensored }) => {
+    const [activeSlice, setActiveSlice] = useState<string | null>(null);
+
+    const COLORS = ['#3b82f6', '#16a34a', '#facc15', '#ef4444', '#8b5cf6', '#ec4899', '#10b981', '#f97316', '#64748b'];
+
+    const categoryData = useMemo(() => {
+        if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
+        
+        const expensesByCategory = expenses.reduce((acc, expense) => {
+            const category = expense.category || 'Outros';
+            const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
+            acc[category] = (acc[category] || 0) + amount;
+            return acc;
+        }, {} as Record<string, number>);
+        
+        return Object.entries(expensesByCategory)
+            .map(([name, value], index) => ({ name, value, color: COLORS[index % COLORS.length] }))
+            .sort((a, b) => b.value - a.value);
+    }, [expenses, totalExpenses]);
+
+    if (categoryData.length === 0) {
+        return <p className="text-slate-500 text-center mt-6">Nenhum gasto para exibir no gráfico.</p>;
+    }
+
+    let cumulativeAngle = 0;
 
     return (
         <div className="mt-6">
-            <h3 className="text-lg font-bold text-slate-300 mb-2">Top Gastos por Subcategoria</h3>
-            <ul className="space-y-2">
-                {rankedExpenses.map(([subcategory, total]) => (
-                    <li key={subcategory} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-400">{subcategory}</span>
-                        <span className="font-bold text-slate-200">{formatCurrency(total, isCensored)}</span>
-                    </li>
-                ))}
-            </ul>
+            <h3 className="text-lg font-bold text-slate-300 mb-4">Gastos por Categoria</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div className="relative w-40 h-40 mx-auto">
+                    <svg viewBox="0 0 200 200">
+                        {categoryData.map((slice) => {
+                            const percentage = (slice.value / totalExpenses) * 100;
+                            const startAngle = cumulativeAngle;
+                            const endAngle = cumulativeAngle + (percentage / 100) * 360;
+                            const pathData = describeDonutArc(100, 100, 100, 70, startAngle, endAngle);
+                            cumulativeAngle = endAngle;
+
+                            const isSliceActive = activeSlice === slice.name;
+
+                            return (
+                                <g 
+                                    key={slice.name} 
+                                    onMouseEnter={() => setActiveSlice(slice.name)}
+                                    onMouseLeave={() => setActiveSlice(null)}
+                                >
+                                    <path 
+                                        d={pathData} 
+                                        fill={slice.color} 
+                                        className="transition-transform duration-200"
+                                        style={{ transform: isSliceActive ? 'scale(1.05)' : 'scale(1)', transformOrigin: 'center center' }}
+                                    />
+                                </g>
+                            );
+                        })}
+                    </svg>
+                    {activeSlice && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                            <p className="text-sm text-slate-300 break-words px-2">{activeSlice}</p>
+                            <p className="font-bold text-lg text-white">
+                                {formatCurrency(categoryData.find(d => d.name === activeSlice)?.value || 0, isCensored)}
+                            </p>
+                        </div>
+                    )}
+                </div>
+                <ul className="space-y-1 text-sm self-start max-h-36 overflow-y-auto">
+                    {categoryData.map(slice => (
+                        <li key={slice.name} className="flex items-center justify-between gap-2">
+                           <div className="flex items-center gap-2 truncate">
+                             <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
+                             <span className="truncate">{slice.name}</span>
+                           </div>
+                           <span className="font-bold">{((slice.value / totalExpenses) * 100).toFixed(1)}%</span>
+                        </li>
+                    ))}
+                </ul>
+            </div>
         </div>
     );
 };
 
 
-const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[]; displayedDate: Date; isCensored: boolean }> = ({ income, expenses, surplus, monthlyExpensesList, displayedDate, isCensored }) => {
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[]; isCensored: boolean }> = ({ income, expenses, surplus, monthlyExpensesList, isCensored }) => {
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
@@ -1010,7 +1070,7 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
                             </div>
                         </div>
                     </div>
-                    <SubcategoryRanking expenses={monthlyExpensesList} displayedDate={displayedDate} isCensored={isCensored} />
+                    <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
                 </div>
             </div>
         </div>
