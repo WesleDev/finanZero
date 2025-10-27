@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -13,8 +16,8 @@ const TrashIcon: React.FC = () => (
 const WalletIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
 );
-const TrendingUpIcon: React.FC = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+const TrendingUpIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6 mr-2"} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
 );
 const TrendingDownIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
@@ -109,6 +112,51 @@ const parseCurrencyInput = (value: string): number => {
 
 const getMonthYear = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): number => {
+    const targetMonthYear = getMonthYear(date);
+    const CARD_CLOSING_DAY = 15;
+
+    return expenses.reduce((total, expense) => {
+      if (expense.isRecurring) {
+        const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+        if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
+        }
+        const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
+
+        if (effectiveStartMonthYear <= targetMonthYear) {
+          return total + expense.amount;
+        }
+      } else if (expense.installments) {
+        const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+        const firstPaymentDate = new Date(effectiveStartDate);
+         if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+            firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+        }
+        
+        const installmentAmount = expense.amount / expense.installments.total;
+        for (let i = 0; i < expense.installments.total; i++) {
+          const installmentDate = new Date(firstPaymentDate);
+          installmentDate.setMonth(firstPaymentDate.getMonth() + i);
+          if (getMonthYear(installmentDate) === targetMonthYear) {
+            return total + installmentAmount;
+          }
+        }
+      } else { // One-time expense
+        const effectiveDate = new Date(expense.date + 'T00:00:00');
+        if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+        }
+        const effectiveMonthYear = getMonthYear(effectiveDate);
+
+        if (effectiveMonthYear === targetMonthYear) {
+          return total + expense.amount;
+        }
+      }
+      return total;
+    }, 0);
 };
 
 // --- MODAL COMPONENTS ---
@@ -209,51 +257,15 @@ export default function App() {
   
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  // Expense Filters
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [subcategoryFilter, setSubcategoryFilter] = useState('all');
+  const [recurringFilter, setRecurringFilter] = useState('all'); // 'all', 'yes', 'no'
+
   const totalIncome = useMemo(() => incomes.reduce((acc, inc) => acc + inc.amount, 0), [incomes]);
 
   const calculateMonthlyExpenses = useCallback((date: Date) => {
-    const targetMonthYear = getMonthYear(date);
-    const CARD_CLOSING_DAY = 15;
-
-    return expenses.reduce((total, expense) => {
-      if (expense.isRecurring) {
-        const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-        if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
-            effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
-        }
-        const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
-
-        if (effectiveStartMonthYear <= targetMonthYear) {
-          return total + expense.amount;
-        }
-      } else if (expense.installments) {
-        const effectiveStartDate = new Date(expense.date + 'T00:00:00');
-        const firstPaymentDate = new Date(effectiveStartDate);
-         if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-            firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
-        }
-        
-        const installmentAmount = expense.amount / expense.installments.total;
-        for (let i = 0; i < expense.installments.total; i++) {
-          const installmentDate = new Date(firstPaymentDate);
-          installmentDate.setMonth(firstPaymentDate.getMonth() + i);
-          if (getMonthYear(installmentDate) === targetMonthYear) {
-            return total + installmentAmount;
-          }
-        }
-      } else { // One-time expense
-        const effectiveDate = new Date(expense.date + 'T00:00:00');
-        if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
-            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-        }
-        const effectiveMonthYear = getMonthYear(effectiveDate);
-
-        if (effectiveMonthYear === targetMonthYear) {
-          return total + expense.amount;
-        }
-      }
-      return total;
-    }, 0);
+    return calculateMonthlyExpensesForDate(expenses, date);
   }, [expenses]);
 
   const { displayedMonthExpenses, previousMonthExpenses, surplus } = useMemo(() => {
@@ -305,6 +317,17 @@ export default function App() {
       return effectiveMonthYear === displayedMonthKey;
     });
   }, [expenses, displayedDate]);
+
+  const filteredExpensesList = useMemo(() => {
+    return displayedMonthExpensesList.filter(expense => {
+      const categoryMatch = categoryFilter === 'all' || expense.category === categoryFilter;
+      const subcategoryMatch = subcategoryFilter === 'all' || expense.subcategory === subcategoryFilter;
+      const recurringMatch = recurringFilter === 'all' ||
+                           (recurringFilter === 'yes' && expense.isRecurring) ||
+                           (recurringFilter === 'no' && !expense.isRecurring && !expense.installments);
+      return categoryMatch && subcategoryMatch && recurringMatch;
+    });
+  }, [displayedMonthExpensesList, categoryFilter, subcategoryFilter, recurringFilter]);
 
   // --- INCOME CRUD ---
   const addIncome = (income: Omit<Income, 'id'>) => {
@@ -545,7 +568,7 @@ export default function App() {
                      />
                      <div className="mt-8">
                         <ExpenseManager 
-                          expenses={displayedMonthExpensesList} 
+                          expenses={filteredExpensesList} 
                           displayedDate={displayedDate}
                           onAddExpense={handleStartAddExpense} 
                           onEditExpense={handleStartEditExpense} 
@@ -553,6 +576,12 @@ export default function App() {
                           onPreviousMonth={goToPreviousMonth}
                           onNextMonth={goToNextMonth}
                           isCensored={isCensored}
+                          categoryFilter={categoryFilter}
+                          setCategoryFilter={setCategoryFilter}
+                          subcategoryFilter={subcategoryFilter}
+                          setSubcategoryFilter={setSubcategoryFilter}
+                          recurringFilter={recurringFilter}
+                          setRecurringFilter={setRecurringFilter}
                         />
                      </div>
                 </div>
@@ -572,7 +601,7 @@ export default function App() {
         {activeTab === 'investments' && (
           <InvestmentsPage
             jars={jars}
-            onRemoveJar={removeJar}
+            onRemoveJar={onRemoveJar}
             onAddJar={() => setJarModalOpen(true)}
             expensesForMonth={displayedMonthExpensesList}
             fortnightlyIncome={fortnightlyIncome}
@@ -583,6 +612,14 @@ export default function App() {
             setMidMonthPercentages={setMidMonthPercentages}
             endOfMonthPercentages={endOfMonthPercentages}
             setEndOfMonthPercentages={setEndOfMonthPercentages}
+            isCensored={isCensored}
+          />
+        )}
+
+        {activeTab === 'evolution' && (
+          <FinancialEvolutionPage
+            incomes={incomes}
+            expenses={expenses}
             isCensored={isCensored}
           />
         )}
@@ -662,6 +699,7 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
   const tabs = [
     { id: 'dashboard', name: 'Painel Principal', icon: <ChartPieIcon className="h-5 w-5 mr-2"/> },
     { id: 'investments', name: 'Investimentos', icon: <CurrencyDollarIcon className="h-5 w-5 mr-2"/> },
+    { id: 'evolution', name: 'Evolução', icon: <TrendingUpIcon className="h-5 w-5 mr-2"/> },
   ];
 
   return (
@@ -684,6 +722,209 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
       </nav>
     </div>
   );
+};
+
+interface FinancialEvolutionChartProps {
+    data: { month: string; income: number; expenses: number; surplus: number; }[];
+    isCensored: boolean;
+}
+
+const FinancialEvolutionChart: React.FC<FinancialEvolutionChartProps> = ({ data, isCensored }) => {
+    const [tooltip, setTooltip] = useState<{ x: number, y: number, dataPoint: any } | null>(null);
+    const svgRef = useRef<SVGSVGElement>(null);
+
+    const width = 800;
+    const height = 400;
+    const margin = { top: 40, right: 50, bottom: 60, left: 80 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    const { yMin, yMax } = useMemo(() => {
+        const allValues = data.flatMap(d => [d.income, d.expenses, d.surplus]);
+        return {
+            yMin: Math.min(...allValues, 0),
+            yMax: Math.max(...allValues, 100), // Ensure max is at least 100 for small values
+        };
+    }, [data]);
+    
+    const yScale = useCallback((value: number) => {
+        const range = yMax - yMin;
+        if (range === 0) return innerHeight / 2;
+        return innerHeight - ((value - yMin) / range) * innerHeight;
+    }, [yMin, yMax, innerHeight]);
+
+    const xScale = useCallback((index: number) => {
+        if (data.length <= 1) return innerWidth / 2;
+        return (index / (data.length - 1)) * innerWidth;
+    }, [data.length, innerWidth]);
+    
+    const lineGenerator = (key: 'income' | 'expenses' | 'surplus') => {
+        return data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d[key])}`).join(' ');
+    };
+
+    const yAxisTicks = useMemo(() => {
+        const ticks = [];
+        const tickCount = 5;
+        const range = yMax - yMin;
+        if (range === 0) return [{ value: yMax, y: yScale(yMax) }];
+
+        const step = range / (tickCount - 1);
+        for (let i = 0; i < tickCount; i++) {
+            const value = yMin + (step * i);
+            ticks.push({ value, y: yScale(value) });
+        }
+        return ticks;
+    }, [yMin, yMax, yScale]);
+
+    const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+        if (!svgRef.current) return;
+        const svgRect = svgRef.current.getBoundingClientRect();
+        const x = e.clientX - svgRect.left - margin.left;
+        
+        let index = 0;
+        if(data.length > 1) {
+          index = Math.round((x / innerWidth) * (data.length - 1));
+        }
+
+        if (index >= 0 && index < data.length) {
+            const dataPoint = data[index];
+            const pointX = xScale(index);
+            const pointY = e.clientY - svgRect.top - margin.top;
+            setTooltip({ x: pointX, y: pointY, dataPoint });
+        }
+    };
+    
+    const handleMouseLeave = () => {
+        setTooltip(null);
+    };
+
+    const colors = { income: '#16a34a', expenses: '#dc2626', surplus: '#3b82f6' };
+
+    if(isCensored) {
+      return <div className="text-center py-10 text-slate-400">Desative o modo de ocultar valores para ver o gráfico.</div>
+    }
+
+    return (
+        <div className="relative">
+            <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} className="w-full h-auto">
+                <g transform={`translate(${margin.left}, ${margin.top})`}>
+                    {/* Y-axis */}
+                    {yAxisTicks.map(({ value, y }) => (
+                        <g key={value} transform={`translate(0, ${y})`}>
+                            <line x2={innerWidth} className="stroke-dark-700" />
+                            <text x="-10" dy="0.32em" textAnchor="end" className="fill-slate-400 text-xs">
+                                {formatCurrency(value, false).replace(/\s/g, '').replace('R$', '')}
+                            </text>
+                        </g>
+                    ))}
+                    
+                    {/* X-axis */}
+                    {data.map((d, i) => (
+                        <g key={d.month} transform={`translate(${xScale(i)}, ${innerHeight})`}>
+                            <text y="20" textAnchor="middle" className="fill-slate-400 text-xs capitalize">
+                                {d.month}
+                            </text>
+                        </g>
+                    ))}
+                    
+                    {/* Lines */}
+                    <path d={lineGenerator('income')} fill="none" stroke={colors.income} strokeWidth="3" />
+                    <path d={lineGenerator('expenses')} fill="none" stroke={colors.expenses} strokeWidth="3" />
+                    <path d={lineGenerator('surplus')} fill="none" stroke={colors.surplus} strokeWidth="3" />
+
+                    {/* Tooltip Indicator Line */}
+                    {tooltip && (
+                        <g>
+                           <line x1={tooltip.x} y1="0" x2={tooltip.x} y2={innerHeight} className="stroke-slate-500" strokeDasharray="4 2" />
+                           <circle cx={tooltip.x} cy={yScale(tooltip.dataPoint.income)} r="5" fill={colors.income} className="stroke-dark-800" strokeWidth="2" />
+                           <circle cx={tooltip.x} cy={yScale(tooltip.dataPoint.expenses)} r="5" fill={colors.expenses} className="stroke-dark-800" strokeWidth="2" />
+                           <circle cx={tooltip.x} cy={yScale(tooltip.dataPoint.surplus)} r="5" fill={colors.surplus} className="stroke-dark-800" strokeWidth="2" />
+                        </g>
+                    )}
+                </g>
+            </svg>
+
+            {/* Tooltip box (HTML for easier styling) */}
+            {tooltip && (
+                <div
+                    className="absolute bg-dark-900 p-3 rounded-lg shadow-lg pointer-events-none transition-transform duration-100 border border-dark-600"
+                    style={{
+                        left: `${margin.left + tooltip.x}px`,
+                        top: `${margin.top + tooltip.y}px`,
+                        transform: `translate(${tooltip.x > innerWidth / 2 ? '-110%' : '10%'}, -50%)`,
+                        minWidth: '160px'
+                    }}
+                >
+                    <p className="font-bold text-center text-slate-200 mb-2 capitalize">{tooltip.dataPoint.month}</p>
+                    <ul className="space-y-1 text-sm">
+                        <li className="flex justify-between items-center">
+                            <span className="flex items-center"><div className="w-2 h-2 rounded-full mr-2" style={{backgroundColor: colors.income}}></div>Receita:</span>
+                            <span className="font-bold" style={{color: colors.income}}>{formatCurrency(tooltip.dataPoint.income, false)}</span>
+                        </li>
+                         <li className="flex justify-between items-center">
+                            <span className="flex items-center"><div className="w-2 h-2 rounded-full mr-2" style={{backgroundColor: colors.expenses}}></div>Despesas:</span>
+                            <span className="font-bold" style={{color: colors.expenses}}>{formatCurrency(tooltip.dataPoint.expenses, false)}</span>
+                        </li>
+                         <li className="flex justify-between items-center">
+                            <span className="flex items-center"><div className="w-2 h-2 rounded-full mr-2" style={{backgroundColor: colors.surplus}}></div>Sobra:</span>
+                            <span className="font-bold" style={{color: colors.surplus}}>{formatCurrency(tooltip.dataPoint.surplus, false)}</span>
+                        </li>
+                    </ul>
+                </div>
+            )}
+             {/* Legend */}
+            <div className="flex justify-center flex-wrap items-center gap-4 sm:gap-6 mt-4 text-sm">
+                <span className="flex items-center"><div className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: colors.income}}></div>Receita</span>
+                <span className="flex items-center"><div className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: colors.expenses}}></div>Despesas</span>
+                <span className="flex items-center"><div className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: colors.surplus}}></div>Sobra</span>
+            </div>
+        </div>
+    );
+};
+
+interface FinancialEvolutionPageProps {
+  incomes: Income[];
+  expenses: Expense[];
+  isCensored: boolean;
+}
+
+const FinancialEvolutionPage: React.FC<FinancialEvolutionPageProps> = ({ incomes, expenses, isCensored }) => {
+    const historicalData = useMemo(() => {
+        const data = [];
+        const today = new Date();
+        const totalMonthlyIncome = incomes.reduce((acc, inc) => acc + inc.amount, 0);
+
+        if (totalMonthlyIncome === 0 && expenses.length === 0) {
+          return [];
+        }
+
+        for (let i = 11; i >= 0; i--) {
+            const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const monthLabel = date.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }).replace(' de', '');
+
+            const monthlyExpenses = calculateMonthlyExpensesForDate(expenses, date);
+            const surplus = totalMonthlyIncome - monthlyExpenses;
+
+            data.push({
+                month: monthLabel,
+                income: totalMonthlyIncome,
+                expenses: monthlyExpenses,
+                surplus: surplus,
+            });
+        }
+        return data;
+    }, [incomes, expenses]);
+
+    return (
+        <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-6 text-center">Evolução Financeira (Últimos 12 Meses)</h2>
+            {historicalData.length > 0 ? (
+                <FinancialEvolutionChart data={historicalData} isCensored={isCensored} />
+            ) : (
+                <p className="text-slate-400 text-center py-10">Adicione receitas e despesas para ver sua evolução financeira.</p>
+            )}
+        </div>
+    );
 };
 
 interface InvestmentReportProps {
@@ -1051,11 +1292,13 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const categoryData = useMemo(() => {
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
-        const expensesByCategory = expenses.reduce((acc, expense) => {
+        // FIX: Explicitly type the accumulator in reduce to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
+        const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
             const category = expense.category || 'Outros';
             const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
             acc[category] = (acc[category] || 0) + amount;
             return acc;
+        // FIX: Cast the initial empty object to Record<string, number> to ensure correct type inference for the reduce operation's accumulator.
         }, {} as Record<string, number>);
         
         return Object.entries(expensesByCategory)
@@ -1066,13 +1309,15 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const expensesBySubcategory = useMemo(() => {
         const result: Record<string, { name: string; value: number }[]> = {};
         categoryData.forEach(cat => {
+          // FIX: Explicitly type the accumulator in reduce to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
           const subcategories = expenses
             .filter(e => e.category === cat.name)
-            .reduce((acc, expense) => {
+            .reduce((acc: Record<string, number>, expense) => {
               const subcatName = expense.subcategory || 'Outros';
               const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
               acc[subcatName] = (acc[subcatName] || 0) + amount;
               return acc;
+            // FIX: Cast the initial empty object to Record<string, number> to ensure correct type inference for the reduce operation's accumulator.
             }, {} as Record<string, number>);
             
           result[cat.name] = Object.entries(subcategories)
@@ -1307,6 +1552,66 @@ const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onE
   );
 };
 
+interface ExpenseFilterProps {
+  categoryFilter: string;
+  setCategoryFilter: (value: string) => void;
+  subcategoryFilter: string;
+  setSubcategoryFilter: (value: string) => void;
+  recurringFilter: string;
+  setRecurringFilter: (value: string) => void;
+}
+
+const ExpenseFilter: React.FC<ExpenseFilterProps> = ({
+  categoryFilter, setCategoryFilter,
+  subcategoryFilter, setSubcategoryFilter,
+  recurringFilter, setRecurringFilter,
+}) => {
+  const availableSubcategories = SUBCATEGORIES[categoryFilter as keyof typeof SUBCATEGORIES] || [];
+
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setCategoryFilter(e.target.value);
+    setSubcategoryFilter('all');
+  };
+
+  const handleClearFilters = () => {
+    setCategoryFilter('all');
+    setSubcategoryFilter('all');
+    setRecurringFilter('all');
+  };
+
+  return (
+    <div className="bg-dark-700/50 p-4 rounded-lg mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        <div>
+          <label className="block mb-1 text-sm font-semibold text-slate-300">Categoria</label>
+          <select value={categoryFilter} onChange={handleCategoryChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm">
+            <option value="all">Todas</option>
+            {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1 text-sm font-semibold text-slate-300">Subcategoria</label>
+          <select value={subcategoryFilter} onChange={e => setSubcategoryFilter(e.target.value)} disabled={categoryFilter === 'all' || availableSubcategories.length === 0} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+            <option value="all">Todas</option>
+            {availableSubcategories.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1 text-sm font-semibold text-slate-300">Tipo</label>
+          <select value={recurringFilter} onChange={e => setRecurringFilter(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm">
+            <option value="all">Todos</option>
+            <option value="yes">Recorrentes</option>
+            <option value="no">Não Recorrentes</option>
+          </select>
+        </div>
+        <button onClick={handleClearFilters} className="w-full bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors text-sm">
+          Limpar Filtros
+        </button>
+      </div>
+    </div>
+  );
+};
+
 interface ExpenseManagerProps {
   expenses: Expense[];
   displayedDate: Date;
@@ -1316,9 +1621,15 @@ interface ExpenseManagerProps {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   isCensored: boolean;
+  categoryFilter: string;
+  setCategoryFilter: (value: string) => void;
+  subcategoryFilter: string;
+  setSubcategoryFilter: (value: string) => void;
+  recurringFilter: string;
+  setRecurringFilter: (value: string) => void;
 }
 
-const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth, isCensored }) => {
+const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth, isCensored, ...filterProps }) => {
   const monthYearDisplay = displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     
   return (
@@ -1339,9 +1650,10 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                     <span className="hidden sm:inline ml-2">Adicionar</span>
                 </button>
             </div>
+            <ExpenseFilter {...filterProps} />
             <div className="flex-grow overflow-y-auto max-h-96 pr-2">
             {expenses.length === 0 ? (
-                <p className="text-slate-400 text-center py-10">Nenhuma despesa este mês.</p>
+                <p className="text-slate-400 text-center py-10">Nenhuma despesa encontrada para este mês com os filtros aplicados.</p>
             ) : (
                 <ul className="space-y-3">
                     {expenses.map(exp => {
