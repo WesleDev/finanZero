@@ -2,6 +2,7 @@
 
 
 
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -601,7 +602,7 @@ export default function App() {
         {activeTab === 'investments' && (
           <InvestmentsPage
             jars={jars}
-            onRemoveJar={onRemoveJar}
+            onRemoveJar={removeJar}
             onAddJar={() => setJarModalOpen(true)}
             expensesForMonth={displayedMonthExpensesList}
             fortnightlyIncome={fortnightlyIncome}
