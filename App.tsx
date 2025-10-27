@@ -3,6 +3,8 @@
 
 
 
+
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -82,6 +84,12 @@ const CreditCardIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
     </svg>
+);
+
+const ExclamationIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-5 w-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+  </svg>
 );
 
 
@@ -1725,6 +1733,8 @@ const SavingsManager: React.FC<{
         return jars.reduce((acc, jar) => acc + (percentages[jar.id] || 0), 0);
     }, [jars, percentages]);
 
+    const isDistributionDisabled = surplus <= 0;
+
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
             <div className="flex justify-between items-center mb-4">
@@ -1734,43 +1744,58 @@ const SavingsManager: React.FC<{
                      <span className="hidden sm:inline ml-2">Criar</span>
                 </button>
             </div>
-            {surplus <= 0 && jars.length > 0 ? (
-                <p className="text-center text-slate-400 py-10">Você precisa de um saldo positivo para distribuir.</p>
-            ) : (
-                <div className="flex-grow">
-                    <div className="mb-4">
-                        <div className="w-full bg-dark-600 rounded-full h-4">
-                            <div className={`rounded-full h-4 text-xs flex items-center justify-center text-white ${totalPercentage > 100 ? 'bg-danger' : 'bg-success'}`} style={{ width: `${Math.min(totalPercentage, 100)}%` }}>{totalPercentage}%</div>
-                        </div>
-                        {totalPercentage > 100 && <p className="text-danger text-sm mt-1">Total não pode exceder 100%.</p>}
-                         {totalPercentage < 100 && totalPercentage > 0 && <p className="text-yellow-400 text-sm mt-1">Faltam {100-totalPercentage}% para distribuir.</p>}
-                    </div>
-                    {jars.length === 0 ? (
-                         <p className="text-slate-400 text-center py-10">Crie caixinhas para guardar o dinheiro que sobra.</p>
-                    ) : (
-                    <ul className="space-y-3 max-h-80 overflow-y-auto pr-2">
-                        {jars.map(jar => {
-                            const percentage = percentages[jar.id] || 0;
-                            return (
-                                <li key={jar.id} className="bg-dark-700 p-3 rounded-lg">
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
-                                        <span className="font-semibold self-start sm:self-center">{jar.name}</span>
-                                        <div className="flex items-center gap-2 self-end sm:self-center">
-                                            <input type="number" value={percentage} onChange={(e) => onPercentageChange(jar.id, parseInt(e.target.value) || 0)} className="w-16 bg-dark-600 text-center rounded p-1" />
-                                            <span>%</span>
-                                            <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger">
-                                                <TrashIcon />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <p className="text-accent font-bold mt-1 text-right sm:text-left">{formatCurrency((surplus * percentage) / 100, isCensored)}</p>
-                                </li>
-                            )
-                        })}
-                    </ul>
-                    )}
+            
+            {isDistributionDisabled && jars.length > 0 && (
+                <div className="bg-yellow-500/20 text-yellow-300 p-3 rounded-lg mb-4 flex items-center gap-2">
+                    <ExclamationIcon className="h-5 w-5" />
+                    <p>Saldo insuficiente para distribuir. Os valores não serão aplicados.</p>
                 </div>
             )}
+
+            <div className="flex-grow">
+                <div className="mb-4">
+                    <div className="w-full bg-dark-600 rounded-full h-4">
+                        <div className={`rounded-full h-4 text-xs flex items-center justify-center text-white ${totalPercentage > 100 ? 'bg-danger' : 'bg-success'}`} style={{ width: `${Math.min(totalPercentage, 100)}%` }}>{totalPercentage}%</div>
+                    </div>
+                    {totalPercentage > 100 && (
+                        <div className="text-danger text-sm mt-2 flex items-center gap-1">
+                            <ExclamationIcon className="h-4 w-4" />
+                            <span>Total não pode exceder 100%.</span>
+                        </div>
+                    )}
+                    {totalPercentage < 100 && totalPercentage > 0 && <p className="text-yellow-400 text-sm mt-1">Faltam {100-totalPercentage}% para distribuir.</p>}
+                </div>
+                {jars.length === 0 ? (
+                        <p className="text-slate-400 text-center py-10">Crie caixinhas para guardar o dinheiro que sobra.</p>
+                ) : (
+                <ul className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                    {jars.map(jar => {
+                        const percentage = percentages[jar.id] || 0;
+                        return (
+                            <li key={jar.id} className="bg-dark-700 p-3 rounded-lg">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
+                                    <span className="font-semibold self-start sm:self-center">{jar.name}</span>
+                                    <div className="flex items-center gap-2 self-end sm:self-center">
+                                        <input 
+                                          type="number" 
+                                          value={percentage} 
+                                          onChange={(e) => onPercentageChange(jar.id, parseInt(e.target.value) || 0)} 
+                                          className="w-16 bg-dark-600 text-center rounded p-1 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                          disabled={isDistributionDisabled}
+                                        />
+                                        <span>%</span>
+                                        <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger">
+                                            <TrashIcon />
+                                        </button>
+                                    </div>
+                                </div>
+                                <p className="text-accent font-bold mt-1 text-right sm:text-left">{formatCurrency((surplus * percentage) / 100, isCensored)}</p>
+                            </li>
+                        )
+                    })}
+                </ul>
+                )}
+            </div>
         </div>
     );
 };
