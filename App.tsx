@@ -1,10 +1,5 @@
 
 
-
-
-
-
-
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -416,20 +411,23 @@ export default function App() {
   
   // --- JAR CRUD ---
   const addJar = (jar: Omit<SavingsJar, 'id'>) => {
-      setJars([...jars, { ...jar, id: Date.now().toString() }]);
+      const newJarWithId = { ...jar, id: Date.now().toString() };
+      setJars(currentJars => [...currentJars, newJarWithId]);
+      setMidMonthPercentages(prev => ({...prev, [newJarWithId.id]: newJarWithId.percentage}));
+      setEndOfMonthPercentages(prev => ({...prev, [newJarWithId.id]: newJarWithId.percentage}));
       setJarModalOpen(false);
   };
 
   const updateJarPercentage = (id: string, percentage: number) => {
     const newJars = jars.map(jar => jar.id === id ? {...jar, percentage} : jar);
     const totalPercentage = newJars.reduce((acc, jar) => acc + jar.percentage, 0);
-    if(totalPercentage <= 100) {
-        setJars(newJars);
-    } else {
-        // Optionally show an alert or handle the error
+
+    setJars(newJars);
+    setMidMonthPercentages(prev => ({ ...prev, [id]: percentage }));
+    setEndOfMonthPercentages(prev => ({ ...prev, [id]: percentage }));
+
+    if (totalPercentage > 100) {
         console.warn("Total percentage cannot exceed 100%");
-        // For a better UX, you might want to still set the value but show an error
-        setJars(newJars);
     }
   };
     
@@ -440,7 +438,19 @@ export default function App() {
       isOpen: true,
       title: 'Confirmar Exclusão de Caixinha',
       message: `Tem certeza que deseja excluir a caixinha "${jarToDelete.name}"? Esta ação não pode ser desfeita.`,
-      onConfirm: () => setJars(currentJars => currentJars.filter(j => j.id !== id)),
+      onConfirm: () => {
+        setJars(currentJars => currentJars.filter(j => j.id !== id));
+        setMidMonthPercentages(currentPercentages => {
+            const newPercentages = { ...currentPercentages };
+            delete newPercentages[id];
+            return newPercentages;
+        });
+        setEndOfMonthPercentages(currentPercentages => {
+            const newPercentages = { ...currentPercentages };
+            delete newPercentages[id];
+            return newPercentages;
+        });
+      },
     });
   };
   
@@ -1301,13 +1311,12 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const categoryData = useMemo(() => {
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
-        // FIX: Explicitly type the accumulator in reduce to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
+        // Fix: Explicitly type the accumulator in `reduce` to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
         const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
             const category = expense.category || 'Outros';
             const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
             acc[category] = (acc[category] || 0) + amount;
             return acc;
-        // FIX: Cast the initial empty object to Record<string, number> to ensure correct type inference for the reduce operation's accumulator.
         }, {} as Record<string, number>);
         
         return Object.entries(expensesByCategory)
@@ -1318,7 +1327,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const expensesBySubcategory = useMemo(() => {
         const result: Record<string, { name: string; value: number }[]> = {};
         categoryData.forEach(cat => {
-          // FIX: Explicitly type the accumulator in reduce to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
+          // Fix: Explicitly type the accumulator in `reduce` to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
           const subcategories = expenses
             .filter(e => e.category === cat.name)
             .reduce((acc: Record<string, number>, expense) => {
@@ -1326,7 +1335,6 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
               const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
               acc[subcatName] = (acc[subcatName] || 0) + amount;
               return acc;
-            // FIX: Cast the initial empty object to Record<string, number> to ensure correct type inference for the reduce operation's accumulator.
             }, {} as Record<string, number>);
             
           result[cat.name] = Object.entries(subcategories)
