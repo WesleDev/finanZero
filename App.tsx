@@ -1,7 +1,8 @@
 
 
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { Expense, SavingsJar, Income } from './types';
+import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 
 // --- ICONS ---
@@ -79,6 +80,17 @@ const CreditCardIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
     </svg>
+);
+const CogIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+const XIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
 );
 
 const ExclamationIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -235,6 +247,8 @@ export default function App() {
   const [endOfMonthPercentages, setEndOfMonthPercentages] = useLocalStorage<Record<string, number>>('endOfMonthPercentages', {});
   const [isCensored, setIsCensored] = useLocalStorage<boolean>('isCensored', false);
   const [investmentFrequency, setInvestmentFrequency] = useLocalStorage<'bi-monthly' | 'monthly'>('investmentFrequency', 'bi-monthly');
+  const [categoryThresholds, setCategoryThresholds] = useLocalStorage<Record<string, number>>('categoryThresholds', {});
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const [confirmation, setConfirmation] = useState<{
     isOpen: boolean;
@@ -334,6 +348,19 @@ export default function App() {
     });
   }, [displayedMonthExpensesList, categoryFilter, subcategoryFilter, recurringFilter]);
 
+  // --- NOTIFICATION ---
+  const addNotification = useCallback((message: string, type: Notification['type'] = 'warning') => {
+    const id = Date.now().toString();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  }, []);
+  
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   // --- INCOME CRUD ---
   const addIncome = (income: Omit<Income, 'id'>) => {
     setIncomes([...incomes, { ...income, id: Date.now().toString() }]);
@@ -373,12 +400,26 @@ export default function App() {
   };
 
   // --- EXPENSE CRUD ---
+  const checkExpenseThreshold = useCallback((expense: Omit<Expense, 'id'>) => {
+    const threshold = categoryThresholds[expense.category];
+    const expenseAmount = expense.installments ? (expense.amount / expense.installments.total) : expense.amount;
+    
+    if (threshold && expenseAmount > threshold) {
+      addNotification(
+        `Despesa "${expense.description}" (${formatCurrency(expenseAmount, false)}) excedeu o limite de ${formatCurrency(threshold, false)} para a categoria "${expense.category}".`,
+        'warning'
+      );
+    }
+  }, [categoryThresholds, addNotification]);
+
   const addExpense = (expense: Omit<Expense, 'id'>) => {
+    checkExpenseThreshold(expense);
     setExpenses([...expenses, { ...expense, id: Date.now().toString() }]);
     setExpenseModalOpen(false);
   };
 
   const updateExpense = (updatedExpense: Expense) => {
+    checkExpenseThreshold(updatedExpense);
     setExpenses(expenses.map(e => (e.id === updatedExpense.id ? updatedExpense : e)));
     setExpenseModalOpen(false);
     setEditingExpense(null);
@@ -489,6 +530,7 @@ export default function App() {
       monthlyPayment,
       midMonthPercentages,
       endOfMonthPercentages,
+      categoryThresholds,
     };
     const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(appData, null, 2))}`;
     const link = document.createElement("a");
@@ -516,7 +558,7 @@ export default function App() {
             const data = JSON.parse(text);
 
             // Basic validation
-            if (!data.incomes || !data.expenses || !data.jars || data.fortnightlyIncome === undefined) {
+            if (!data.incomes || !data.expenses || !data.jars) {
                 throw new Error("Arquivo de backup inválido ou corrompido.");
             }
             
@@ -524,10 +566,11 @@ export default function App() {
                 setIncomes(data.incomes);
                 setExpenses(data.expenses);
                 setJars(data.jars);
-                setFortnightlyIncome(data.fortnightlyIncome);
-                setMonthlyPayment(data.monthlyPayment);
-                setMidMonthPercentages(data.midMonthPercentages);
-                setEndOfMonthPercentages(data.endOfMonthPercentages);
+                setFortnightlyIncome(data.fortnightlyIncome || 0);
+                setMonthlyPayment(data.monthlyPayment || 0);
+                setMidMonthPercentages(data.midMonthPercentages || {});
+                setEndOfMonthPercentages(data.endOfMonthPercentages || {});
+                setCategoryThresholds(data.categoryThresholds || {});
                 alert("Dados importados com sucesso!");
             }
         } catch (error) {
@@ -645,7 +688,16 @@ export default function App() {
             isCensored={isCensored}
           />
         )}
+        
+        {activeTab === 'settings' && (
+          <SettingsPage
+            categoryThresholds={categoryThresholds}
+            setCategoryThresholds={setCategoryThresholds}
+          />
+        )}
       </main>
+      
+      <NotificationContainer notifications={notifications} onRemove={removeNotification} />
       
       <IncomeModal
         isOpen={isIncomeModalOpen}
@@ -722,6 +774,7 @@ const TabNavigation: React.FC<{activeTab: string, setActiveTab: (tab: string) =>
     { id: 'dashboard', name: 'Painel Principal', icon: <ChartPieIcon className="h-5 w-5 mr-2"/> },
     { id: 'investments', name: 'Investimentos', icon: <CurrencyDollarIcon className="h-5 w-5 mr-2"/> },
     { id: 'evolution', name: 'Evolução', icon: <TrendingUpIcon className="h-5 w-5 mr-2"/> },
+    { id: 'settings', name: 'Configurações', icon: <CogIcon className="h-5 w-5 mr-2"/> },
   ];
 
   return (
@@ -1182,6 +1235,83 @@ const InvestmentsPage: React.FC<InvestmentsPageProps> = ({
             />
         </div>
     );
+};
+
+const SettingsPage: React.FC<{
+  categoryThresholds: Record<string, number>;
+  setCategoryThresholds: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+}> = ({ categoryThresholds, setCategoryThresholds }) => {
+
+  const handleThresholdChange = (category: string, value: string) => {
+    const parsedValue = parseCurrencyInput(value);
+    setCategoryThresholds(prev => {
+        const newThresholds = {...prev};
+        if(parsedValue > 0) {
+            newThresholds[category] = parsedValue;
+        } else {
+            delete newThresholds[category];
+        }
+        return newThresholds;
+    });
+  };
+
+  return (
+    <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-2">
+      <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-2">Limites de Despesas por Categoria</h2>
+      <p className="text-slate-400 mb-6">Defina um limite para uma despesa individual em cada categoria. Você receberá um aviso se um gasto exceder o valor definido.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...EXPENSE_CATEGORIES].map(category => (
+          <div key={category}>
+            <label className="block mb-1 font-semibold text-slate-300">{category}</label>
+             <input 
+                type="text" 
+                inputMode="decimal" 
+                value={(categoryThresholds[category] || '').toString().replace('.', ',')}
+                onChange={e => handleThresholdChange(category, e.target.value)} 
+                className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" 
+                placeholder="R$ 0,00"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+interface NotificationContainerProps {
+  notifications: Notification[];
+  onRemove: (id: string) => void;
+}
+
+const NotificationContainer: React.FC<NotificationContainerProps> = ({ notifications, onRemove }) => {
+  const icons = {
+    warning: <ExclamationIcon className="h-6 w-6" />,
+    success: <TrendingDownIcon />,
+    danger: <TrendingUpIcon />,
+  };
+
+  const colors = {
+    warning: 'bg-yellow-500/80 border-yellow-400',
+    success: 'bg-green-500/80 border-green-400',
+    danger: 'bg-red-500/80 border-red-400',
+  };
+
+  return (
+    <div className="fixed top-5 right-5 z-[100] w-full max-w-sm space-y-3">
+      {notifications.map(notification => (
+        <div
+          key={notification.id}
+          className={`relative flex items-start gap-4 p-4 rounded-lg shadow-lg border-l-4 text-white ${colors[notification.type]} backdrop-blur-sm animate-fade-in-right`}
+        >
+          <div className="flex-shrink-0">{icons[notification.type]}</div>
+          <p className="flex-grow text-sm">{notification.message}</p>
+          <button onClick={() => onRemove(notification.id)} className="flex-shrink-0 p-1 -m-1 rounded-full hover:bg-white/20">
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 

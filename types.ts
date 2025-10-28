@@ -22,3 +22,9 @@ export interface Income {
   description: string;
   amount: number;
 }
+
+export interface Notification {
+  id: string;
+  message: string;
+  type: 'warning' | 'success' | 'danger';
+}
