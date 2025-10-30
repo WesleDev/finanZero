@@ -2,6 +2,8 @@
 
 
 
+
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -98,6 +100,13 @@ const ExclamationIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-5 w-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
   </svg>
+);
+
+const FastForwardIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <title>Antecipar Parcelas</title>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+    </svg>
 );
 
 
@@ -205,14 +214,21 @@ interface ConfirmationModalProps {
   onConfirm: () => void;
   title: string;
   message: string;
+  confirmText?: string;
+  confirmVariant?: 'danger' | 'primary';
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Excluir', confirmVariant = 'danger' }) => {
   if (!isOpen) return null;
 
   const handleConfirm = () => {
     onConfirm();
     onClose();
+  };
+
+  const variantClasses = {
+      danger: 'bg-danger hover:bg-red-700',
+      primary: 'bg-primary hover:bg-secondary'
   };
 
   return (
@@ -228,8 +244,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, 
           <button onClick={onClose} className="bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors">
             Cancelar
           </button>
-          <button onClick={handleConfirm} className="bg-danger hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
-            Excluir
+          <button onClick={handleConfirm} className={`${variantClasses[confirmVariant]} text-white font-bold py-2 px-4 rounded-lg transition-colors`}>
+            {confirmText}
           </button>
         </div>
       </div>
@@ -256,6 +272,8 @@ export default function App() {
     title: string;
     message: string;
     onConfirm: () => void;
+    confirmText?: string;
+    confirmVariant?: 'danger' | 'primary';
   }>({
     isOpen: false,
     title: '',
@@ -382,6 +400,8 @@ export default function App() {
       title: 'Confirmar Exclusão de Receita',
       message: `Tem certeza que deseja excluir a receita "${incomeToDelete.description}"? Esta ação não pode ser desfeita.`,
       onConfirm: () => setIncomes(currentIncomes => currentIncomes.filter(i => i.id !== id)),
+      confirmText: 'Excluir',
+      confirmVariant: 'danger',
     });
   };
   
@@ -434,6 +454,8 @@ export default function App() {
       title: 'Confirmar Exclusão de Despesa',
       message: `Tem certeza que deseja excluir a despesa "${expenseToDelete.description}"? Esta ação não pode ser desfeita.`,
       onConfirm: () => setExpenses(currentExpenses => currentExpenses.filter(e => e.id !== id)),
+      confirmText: 'Excluir',
+      confirmVariant: 'danger',
     });
   };
     
@@ -451,6 +473,57 @@ export default function App() {
     setExpenseModalOpen(false);
     setEditingExpense(null);
   };
+  
+  const handleAnticipateInstallment = (expenseId: string) => {
+    const expenseToAnticipate = expenses.find(e => e.id === expenseId);
+    if (!expenseToAnticipate || !expenseToAnticipate.installments) return;
+
+    const CARD_CLOSING_DAY = 15;
+    const totalInstallments = expenseToAnticipate.installments.total;
+    const installmentAmount = expenseToAnticipate.amount / totalInstallments;
+
+    const firstPaymentDate = new Date(expenseToAnticipate.date + 'T00:00:00');
+    if (expenseToAnticipate.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+        firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+    }
+
+    const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
+    const currentInstallment = monthsDiff + 1;
+
+    if (currentInstallment > totalInstallments) {
+        addNotification("Esta despesa parcelada já foi totalmente paga.", 'success');
+        return;
+    }
+
+    const paidInstallments = currentInstallment - 1;
+    const remainingInstallments = totalInstallments - paidInstallments;
+    const remainingDebt = remainingInstallments * installmentAmount;
+
+    setConfirmation({
+        isOpen: true,
+        title: 'Confirmar Antecipação',
+        message: `Você tem certeza que deseja antecipar as ${remainingInstallments} parcelas restantes de "${expenseToAnticipate.description}"? Um valor de ${formatCurrency(remainingDebt, false)} será adicionado como uma despesa única na fatura deste mês.`,
+        onConfirm: () => {
+            const newExpense: Omit<Expense, 'id'> = {
+                description: `[Antecipado] ${expenseToAnticipate.description}`,
+                amount: remainingDebt,
+                date: new Date().toISOString().split('T')[0],
+                category: expenseToAnticipate.category,
+                subcategory: expenseToAnticipate.subcategory,
+                isRecurring: false,
+            };
+
+            const updatedExpenses = expenses
+                .filter(e => e.id !== expenseId) // Remove old installment expense
+                .concat({ ...newExpense, id: Date.now().toString() }); // Add new one-time expense
+
+            setExpenses(updatedExpenses);
+            addNotification(`Parcelas de "${expenseToAnticipate.description}" antecipadas com sucesso.`, 'success');
+        },
+        confirmText: 'Confirmar',
+        confirmVariant: 'primary',
+    });
+};
   
   // --- JAR CRUD ---
   const addJar = (jar: Omit<SavingsJar, 'id'>) => {
@@ -494,6 +567,8 @@ export default function App() {
             return newPercentages;
         });
       },
+      confirmText: 'Excluir',
+      confirmVariant: 'danger',
     });
   };
   
@@ -637,6 +712,7 @@ export default function App() {
                           onAddExpense={handleStartAddExpense} 
                           onEditExpense={handleStartEditExpense} 
                           onRemoveExpense={removeExpense}
+                          onAnticipateInstallment={handleAnticipateInstallment}
                           onPreviousMonth={goToPreviousMonth}
                           onNextMonth={goToNextMonth}
                           isCensored={isCensored}
@@ -721,6 +797,8 @@ export default function App() {
         onConfirm={confirmation.onConfirm}
         title={confirmation.title}
         message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        confirmVariant={confirmation.confirmVariant}
       />
       <input 
         type="file"
@@ -1794,6 +1872,7 @@ interface ExpenseManagerProps {
   onAddExpense: () => void;
   onEditExpense: (expense: Expense) => void;
   onRemoveExpense: (id: string) => void;
+  onAnticipateInstallment: (id: string) => void;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   isCensored: boolean;
@@ -1805,7 +1884,7 @@ interface ExpenseManagerProps {
   setRecurringFilter: (value: string) => void;
 }
 
-const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onPreviousMonth, onNextMonth, isCensored, ...filterProps }) => {
+const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onAnticipateInstallment, onPreviousMonth, onNextMonth, isCensored, ...filterProps }) => {
   const monthYearDisplay = displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     
   return (
@@ -1869,6 +1948,11 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                                     <p className="font-bold text-red-400 mr-4">
                                         {formatCurrency(exp.installments ? exp.amount / exp.installments.total : exp.amount, isCensored)}
                                     </p>
+                                    {exp.installments && (
+                                        <button onClick={() => onAnticipateInstallment(exp.id)} className="text-slate-500 hover:text-blue-400 p-1" title="Antecipar Parcelas">
+                                            <FastForwardIcon />
+                                        </button>
+                                    )}
                                     <button onClick={() => onEditExpense(exp)} className="text-slate-500 hover:text-accent p-1">
                                         <EditIcon />
                                     </button>
