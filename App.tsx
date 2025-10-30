@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -280,6 +274,11 @@ export default function App() {
     message: '',
     onConfirm: () => {},
   });
+  
+  const [anticipationState, setAnticipationState] = useState<{
+    isOpen: boolean;
+    expense: Expense | null;
+  }>({ isOpen: false, expense: null });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -474,56 +473,57 @@ export default function App() {
     setEditingExpense(null);
   };
   
-  const handleAnticipateInstallment = (expenseId: string) => {
+  const handleStartAnticipateInstallment = (expenseId: string) => {
     const expenseToAnticipate = expenses.find(e => e.id === expenseId);
-    if (!expenseToAnticipate || !expenseToAnticipate.installments) return;
-
-    const CARD_CLOSING_DAY = 15;
-    const totalInstallments = expenseToAnticipate.installments.total;
-    const installmentAmount = expenseToAnticipate.amount / totalInstallments;
-
-    const firstPaymentDate = new Date(expenseToAnticipate.date + 'T00:00:00');
-    if (expenseToAnticipate.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-        firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+    if (expenseToAnticipate) {
+        setAnticipationState({ isOpen: true, expense: expenseToAnticipate });
     }
+  };
 
-    const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
-    const currentInstallment = monthsDiff + 1;
+  const handleConfirmAnticipation = (expenseId: string, countToAnticipate: number) => {
+      const expenseToModify = expenses.find(e => e.id === expenseId);
+      if (!expenseToModify || !expenseToModify.installments || countToAnticipate <= 0) return;
 
-    if (currentInstallment > totalInstallments) {
-        addNotification("Esta despesa parcelada já foi totalmente paga.", 'success');
-        return;
-    }
+      const installmentAmount = expenseToModify.amount / expenseToModify.installments.total;
+      const amountToPayNow = countToAnticipate * installmentAmount;
 
-    const paidInstallments = currentInstallment - 1;
-    const remainingInstallments = totalInstallments - paidInstallments;
-    const remainingDebt = remainingInstallments * installmentAmount;
+      const newExpense: Omit<Expense, 'id'> = {
+          description: `[Antecipado ${countToAnticipate}x] ${expenseToModify.description}`,
+          amount: amountToPayNow,
+          date: new Date().toISOString().split('T')[0],
+          category: expenseToModify.category,
+          subcategory: expenseToModify.subcategory,
+          isRecurring: false,
+      };
 
-    setConfirmation({
-        isOpen: true,
-        title: 'Confirmar Antecipação',
-        message: `Você tem certeza que deseja antecipar as ${remainingInstallments} parcelas restantes de "${expenseToAnticipate.description}"? Um valor de ${formatCurrency(remainingDebt, false)} será adicionado como uma despesa única na fatura deste mês.`,
-        onConfirm: () => {
-            const newExpense: Omit<Expense, 'id'> = {
-                description: `[Antecipado] ${expenseToAnticipate.description}`,
-                amount: remainingDebt,
-                date: new Date().toISOString().split('T')[0],
-                category: expenseToAnticipate.category,
-                subcategory: expenseToAnticipate.subcategory,
-                isRecurring: false,
-            };
+      const remainingInstallmentsTotal = expenseToModify.installments.total - countToAnticipate;
+      
+      let updatedExpenses = [...expenses];
 
-            const updatedExpenses = expenses
-                .filter(e => e.id !== expenseId) // Remove old installment expense
-                .concat({ ...newExpense, id: Date.now().toString() }); // Add new one-time expense
+      if (remainingInstallmentsTotal <= 0) {
+          updatedExpenses = updatedExpenses.filter(e => e.id !== expenseId);
+      } else {
+          updatedExpenses = updatedExpenses.map(e => {
+              if (e.id === expenseId) {
+                  return {
+                      ...e,
+                      amount: e.amount - amountToPayNow,
+                      installments: {
+                          ...e.installments,
+                          total: remainingInstallmentsTotal,
+                      },
+                  };
+              }
+              return e;
+          });
+      }
+      
+      updatedExpenses.push({ ...newExpense, id: Date.now().toString() });
 
-            setExpenses(updatedExpenses);
-            addNotification(`Parcelas de "${expenseToAnticipate.description}" antecipadas com sucesso.`, 'success');
-        },
-        confirmText: 'Confirmar',
-        confirmVariant: 'primary',
-    });
-};
+      setExpenses(updatedExpenses);
+      addNotification(`Antecipação de ${countToAnticipate} parcela(s) de "${expenseToModify.description}" realizada.`, 'success');
+      setAnticipationState({ isOpen: false, expense: null });
+  };
   
   // --- JAR CRUD ---
   const addJar = (jar: Omit<SavingsJar, 'id'>) => {
@@ -712,7 +712,7 @@ export default function App() {
                           onAddExpense={handleStartAddExpense} 
                           onEditExpense={handleStartEditExpense} 
                           onRemoveExpense={removeExpense}
-                          onAnticipateInstallment={handleAnticipateInstallment}
+                          onAnticipateInstallment={handleStartAnticipateInstallment}
                           onPreviousMonth={goToPreviousMonth}
                           onNextMonth={goToNextMonth}
                           isCensored={isCensored}
@@ -799,6 +799,14 @@ export default function App() {
         message={confirmation.message}
         confirmText={confirmation.confirmText}
         confirmVariant={confirmation.confirmVariant}
+      />
+      <AnticipateInstallmentModal
+        isOpen={anticipationState.isOpen}
+        onClose={() => setAnticipationState({ isOpen: false, expense: null })}
+        expense={anticipationState.expense}
+        onConfirm={handleConfirmAnticipation}
+        displayedDate={displayedDate}
+        isCensored={isCensored}
       />
       <input 
         type="file"
@@ -2281,5 +2289,112 @@ const JarModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddJar: (jar:
                 <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">Criar</button>
             </form>
         </Modal>
+    );
+};
+
+interface AnticipateInstallmentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  expense: Expense | null;
+  onConfirm: (expenseId: string, count: number) => void;
+  displayedDate: Date;
+  isCensored: boolean;
+}
+
+const AnticipateInstallmentModal: React.FC<AnticipateInstallmentModalProps> = ({ isOpen, onClose, expense, onConfirm, displayedDate, isCensored }) => {
+    const [count, setCount] = useState(1);
+
+    const { remainingInstallments, installmentAmount } = useMemo(() => {
+        if (!expense || !expense.installments) return { remainingInstallments: 0, installmentAmount: 0 };
+        
+        const CARD_CLOSING_DAY = 15;
+        const totalInstallments = expense.installments.total;
+        const instAmount = expense.amount / totalInstallments;
+        
+        const firstPaymentDate = new Date(expense.date + 'T00:00:00');
+        if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+            firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+        }
+
+        const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
+        const paidInstallments = monthsDiff < 0 ? 0 : monthsDiff + 1;
+
+        const remaining = totalInstallments - paidInstallments;
+
+        return { remainingInstallments: remaining > 0 ? remaining : 0, installmentAmount: instAmount };
+    }, [expense, displayedDate]);
+
+    useEffect(() => {
+        if (isOpen) {
+            setCount(1);
+        }
+    }, [isOpen]);
+
+    if (!isOpen || !expense) return null;
+
+    const amountToPay = count * installmentAmount;
+
+    const handleConfirm = () => {
+        if (count > 0 && count <= remainingInstallments) {
+            onConfirm(expense.id, count);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="bg-dark-800 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                <div className="p-4 border-b border-dark-700 flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-100">Antecipar Parcelas</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
+                </div>
+                <div className="p-6 space-y-6">
+                    <p className="text-slate-300">Você está antecipando parcelas de: <strong className="text-slate-100">{expense.description}</strong></p>
+                    
+                    <div className="bg-dark-700/50 p-4 rounded-lg text-center">
+                        <p className="text-slate-400 text-sm">Parcelas Restantes</p>
+                        <p className="text-2xl font-bold text-accent">{remainingInstallments}</p>
+                        <p className="text-slate-400 text-sm mt-1">de {formatCurrency(installmentAmount, isCensored)} cada</p>
+                    </div>
+
+                    {remainingInstallments > 0 ? (
+                        <div>
+                            <label htmlFor="installments-range" className="block mb-2 font-semibold text-slate-300">Quantas parcelas deseja antecipar?</label>
+                            <div className="flex items-center gap-4">
+                                <input
+                                    id="installments-range"
+                                    type="range"
+                                    min="1"
+                                    max={remainingInstallments}
+                                    value={count}
+                                    onChange={(e) => setCount(parseInt(e.target.value, 10))}
+                                    className="w-full h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-accent"
+                                />
+                                <span className="bg-dark-900 font-bold text-accent px-3 py-1 rounded-md text-lg w-20 text-center">{count}</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-center text-green-400 font-semibold">Esta despesa já foi totalmente paga!</p>
+                    )}
+                    
+                    <div className="text-center">
+                        <p className="text-slate-400">Valor a ser pago agora:</p>
+                        <p className="text-3xl font-extrabold text-green-400">{formatCurrency(amountToPay, isCensored)}</p>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-dark-700/50 flex justify-end gap-4 rounded-b-lg">
+                    <button onClick={onClose} className="bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors">
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleConfirm} 
+                        disabled={remainingInstallments <= 0}
+                        className="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-dark-600 disabled:cursor-not-allowed disabled:text-slate-500"
+                    >
+                       {remainingInstallments > 0 ? `Antecipar ${count} Parcela(s)` : 'Despesa Finalizada'}
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 };
