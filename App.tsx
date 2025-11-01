@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -96,6 +97,12 @@ const ExclamationIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const CalendarIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+);
+
 const FastForwardIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <title>Antecipar Parcelas</title>
@@ -132,6 +139,19 @@ const parseCurrencyInput = (value: string): number => {
 
 const getMonthYear = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const getBillingDayInMonth = (expenseDate: string, displayedDate: Date): Date => {
+    const originalDate = new Date(expenseDate + 'T00:00:00');
+    const day = originalDate.getDate();
+    const year = displayedDate.getFullYear();
+    const month = displayedDate.getMonth();
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const billingDay = Math.min(day, daysInMonth);
+    
+    return new Date(year, month, billingDay);
 };
 
 const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): number => {
@@ -741,6 +761,7 @@ export default function App() {
         {activeTab === 'investments' && (
           <InvestmentsPage
             jars={jars}
+            // Fix: Pass the 'removeJar' function to the 'onRemoveJar' prop of the InvestmentsPage component, resolving a reference error where 'onRemoveJar' was used as both the prop name and the value.
             onRemoveJar={removeJar}
             onAddJar={() => setJarModalOpen(true)}
             expensesForMonth={displayedMonthExpensesList}
@@ -1930,6 +1951,8 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                             const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
                             currentInstallment = monthsDiff + 1;
                         }
+                        
+                        const billingDate = getBillingDayInMonth(exp.date, displayedDate);
 
                         return(
                             <li key={exp.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
@@ -1941,6 +1964,10 @@ const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate
                                     <div className="text-sm text-slate-400 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
                                         <span className="bg-dark-600 px-2 py-0.5 rounded-full text-xs font-medium">
                                             {exp.category} {exp.subcategory ? `> ${exp.subcategory}` : ''}
+                                        </span>
+                                        <span className="flex items-center gap-1 text-xs">
+                                            <CalendarIcon className="h-4 w-4 text-slate-500" />
+                                            {billingDate.toLocaleDateString('pt-BR')}
                                         </span>
                                         {exp.installments && (
                                             <div className="flex-grow w-full sm:w-auto">
@@ -2160,14 +2187,8 @@ const ExpenseModal: React.FC<{
             setCategory(expenseToEdit.category);
             setSubcategory(expenseToEdit.subcategory || '');
             setIsRecurring(expenseToEdit.isRecurring);
-            const hasInstallments = !!expenseToEdit.installments;
-            setIsInstallment(hasInstallments);
-            if (hasInstallments) {
-                setInstallments(expenseToEdit.installments!.total.toString());
-                setCurrentInstallment('1'); 
-            } else {
-                setInstallments('2');
-            }
+            setIsInstallment(!!expenseToEdit.installments);
+            setInstallments(expenseToEdit.installments ? expenseToEdit.installments.total.toString() : '2');
         } else {
             resetForm();
         }
@@ -2175,226 +2196,233 @@ const ExpenseModal: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-
         const numericAmount = parseCurrencyInput(amount);
+
         if (numericAmount <= 0) {
             alert('Por favor, insira um valor válido.');
             return;
         }
 
-        let finalDate = date;
-        if (isInstallment) {
-            const currentPaymentDate = new Date(date + 'T00:00:00');
-            const currentInstallmentNum = parseInt(currentInstallment, 10);
-            
-            if (!isEditing && currentInstallmentNum > 1) {
-              currentPaymentDate.setMonth(currentPaymentDate.getMonth() - (currentInstallmentNum - 1));
-            }
-            finalDate = currentPaymentDate.toISOString().split('T')[0];
-        }
-
-        const expenseData = {
+        const expenseData: Omit<Expense, 'id'> = {
             description,
             amount: numericAmount,
-            date: finalDate,
+            date,
             category,
-            subcategory: availableSubcategories ? subcategory : undefined,
-            isRecurring: isRecurring && !isInstallment,
-            installments: isInstallment ? { total: parseInt(installments, 10) } : undefined
+            subcategory: subcategory === 'Outros' || !subcategory ? undefined : subcategory,
+            isRecurring,
+            installments: isInstallment ? { total: parseInt(installments) } : undefined,
         };
-
+        
         if (isEditing) {
             onUpdateExpense({ ...expenseData, id: expenseToEdit.id });
         } else {
             onAddExpense(expenseData);
         }
     };
+    
+    const handleClose = () => {
+        resetForm();
+        onClose();
+    };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Editar Despesa' : 'Adicionar Despesa'}>
+        <Modal isOpen={isOpen} onClose={handleClose} title={isEditing ? 'Editar Despesa' : 'Adicionar Despesa'}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label className="block mb-1 font-semibold text-slate-300">Descrição</label>
-                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="Ex: Compra no Supermercado" />
                 </div>
-                <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Valor Total</label>
-                    <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Valor {isInstallment ? 'Total' : ''}</label>
+                        <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    </div>
+                     <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Data da Transação</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    </div>
                 </div>
-                 <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Data {isInstallment ? (isEditing ? 'de Início da Compra' : 'do Pagamento Atual') : 'da Despesa'}</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block mb-1 font-semibold text-slate-300">Categoria</label>
-                        <select value={category} onChange={e => setCategory(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
+                        <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
                             {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                         </select>
                     </div>
-                     {availableSubcategories && availableSubcategories.length > 0 && (
+                    <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Subcategoria</label>
+                        <select value={subcategory} onChange={e => setSubcategory(e.target.value)} disabled={!availableSubcategories || availableSubcategories.length === 0} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50">
+                            {availableSubcategories?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={isRecurring} onChange={e => { setIsRecurring(e.target.checked); if(e.target.checked) setIsInstallment(false); }} className="form-checkbox h-5 w-5 text-accent bg-dark-700 border-dark-600 rounded focus:ring-accent" />
+                        <span>É recorrente?</span>
+                    </label>
+                     <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={isInstallment} onChange={e => { setIsInstallment(e.target.checked); if(e.target.checked) setIsRecurring(false); }} className="form-checkbox h-5 w-5 text-accent bg-dark-700 border-dark-600 rounded focus:ring-accent" />
+                        <span>É parcelado?</span>
+                    </label>
+                </div>
+
+                {isInstallment && !isEditing && (
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block mb-1 font-semibold text-slate-300">Subcategoria</label>
-                            <select value={subcategory} onChange={e => setSubcategory(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
-                                {availableSubcategories.map(sub => <option key={sub} value={sub}>{sub}</option>)}
-                            </select>
+                            <label className="block mb-1 font-semibold text-slate-300">Total de Parcelas</label>
+                            <input type="number" value={installments} onChange={e => setInstallments(e.target.value)} min="2" className="w-full bg-dark-700 p-2 rounded border border-dark-600" />
                         </div>
-                    )}
-                </div>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                        <input type="checkbox" id="isInstallment" checked={isInstallment} onChange={e => setIsInstallment(e.target.checked)} className="mr-2 h-4 w-4 rounded accent-accent"/>
-                        <label htmlFor="isInstallment">É parcelado?</label>
-                    </div>
-                     <div className="flex items-center">
-                        <input type="checkbox" id="isRecurring" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} disabled={isInstallment} className="mr-2 h-4 w-4 rounded accent-accent disabled:opacity-50"/>
-                        <label htmlFor="isRecurring" className={isInstallment ? 'text-slate-500' : ''}>É recorrente?</label>
-                    </div>
-                </div>
-                {isInstallment && (
-                    <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Quantidade Total de Parcelas</label>
-                        <input type="number" min="2" value={installments} onChange={e => setInstallments(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
                     </div>
                 )}
-                {!isEditing && isInstallment && (
-                    <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Número da Parcela Atual</label>
-                        <input type="number" min="1" max={installments} value={currentInstallment} onChange={e => setCurrentInstallment(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                    </div>
+                
+                {isInstallment && isEditing && (
+                    <p className="text-sm text-yellow-400">Não é possível editar o número de parcelas de uma despesa existente. Crie uma nova despesa se necessário.</p>
                 )}
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar'}</button>
+
+
+                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar Despesa'}</button>
             </form>
         </Modal>
     );
 };
 
-
-const JarModal: React.FC<{ isOpen: boolean, onClose: () => void, onAddJar: (jar: Omit<SavingsJar, 'id'>) => void }> = ({ isOpen, onClose, onAddJar }) => {
+const JarModal: React.FC<{ 
+    isOpen: boolean, 
+    onClose: () => void, 
+    onAddJar: (jar: Omit<SavingsJar, 'id'>) => void
+}> = ({ isOpen, onClose, onAddJar }) => {
     const [name, setName] = useState('');
-    
+    const [percentage, setPercentage] = useState('');
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onAddJar({ name, percentage: 0 });
+        const numericPercentage = parseInt(percentage, 10);
+        if (!name.trim()) {
+            alert('Por favor, insira um nome para a caixinha.');
+            return;
+        }
+        if (isNaN(numericPercentage) || numericPercentage < 0 || numericPercentage > 100) {
+            alert('Por favor, insira uma porcentagem válida entre 0 e 100.');
+            return;
+        }
+
+        onAddJar({ name, percentage: numericPercentage });
         setName('');
+        setPercentage('');
     };
+    
+    const handleClose = () => {
+        setName('');
+        setPercentage('');
+        onClose();
+    }
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Criar Caixinha">
+        <Modal isOpen={isOpen} onClose={handleClose} title="Criar Nova Caixinha">
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label className="block mb-1 font-semibold text-slate-300">Nome da Caixinha</label>
-                    <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="Ex: Viagem, Reserva de Emergência"/>
+                    <input 
+                        type="text" 
+                        value={name} 
+                        onChange={e => setName(e.target.value)} 
+                        required 
+                        className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" 
+                        placeholder="Ex: Viagem, Reserva de Emergência" 
+                    />
                 </div>
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">Criar</button>
+                <div>
+                    <label className="block mb-1 font-semibold text-slate-300">Porcentagem Inicial (%)</label>
+                    <input 
+                        type="number" 
+                        inputMode="numeric" 
+                        value={percentage} 
+                        onChange={e => setPercentage(e.target.value)} 
+                        required 
+                        className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent"
+                        placeholder="0"
+                        min="0"
+                        max="100"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                        Esta é a porcentagem padrão para novos investimentos. Você pode ajustar depois.
+                    </p>
+                </div>
+                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    Criar Caixinha
+                </button>
             </form>
         </Modal>
     );
 };
 
 interface AnticipateInstallmentModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  expense: Expense | null;
-  onConfirm: (expenseId: string, count: number) => void;
-  displayedDate: Date;
-  isCensored: boolean;
+    isOpen: boolean;
+    onClose: () => void;
+    expense: Expense | null;
+    onConfirm: (expenseId: string, countToAnticipate: number) => void;
+    displayedDate: Date;
+    isCensored: boolean;
 }
 
 const AnticipateInstallmentModal: React.FC<AnticipateInstallmentModalProps> = ({ isOpen, onClose, expense, onConfirm, displayedDate, isCensored }) => {
     const [count, setCount] = useState(1);
 
-    const { remainingInstallments, installmentAmount } = useMemo(() => {
-        if (!expense || !expense.installments) return { remainingInstallments: 0, installmentAmount: 0 };
-        
+    const remainingInstallments = useMemo(() => {
+        if (!expense || !expense.installments) return 0;
         const CARD_CLOSING_DAY = 15;
-        const totalInstallments = expense.installments.total;
-        const instAmount = expense.amount / totalInstallments;
-        
         const firstPaymentDate = new Date(expense.date + 'T00:00:00');
         if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
             firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
         }
-
         const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
-        const paidInstallments = monthsDiff < 0 ? 0 : monthsDiff + 1;
-
-        const remaining = totalInstallments - paidInstallments;
-
-        return { remainingInstallments: remaining > 0 ? remaining : 0, installmentAmount: instAmount };
+        const paidInstallments = monthsDiff + 1;
+        
+        return Math.max(0, expense.installments.total - paidInstallments);
     }, [expense, displayedDate]);
 
     useEffect(() => {
-        if (isOpen) {
-            setCount(1);
-        }
+      setCount(1);
     }, [isOpen]);
 
-    if (!isOpen || !expense) return null;
-
-    const amountToPay = count * installmentAmount;
-
-    const handleConfirm = () => {
-        if (count > 0 && count <= remainingInstallments) {
-            onConfirm(expense.id, count);
-        }
-    };
-
+    if (!isOpen || !expense || !expense.installments) return null;
+    
+    const installmentAmount = expense.amount / expense.installments.total;
+    const totalToAnticipate = count * installmentAmount;
+    
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4" onClick={onClose}>
-            <div className="bg-dark-800 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-                <div className="p-4 border-b border-dark-700 flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-slate-100">Antecipar Parcelas</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
+        <Modal isOpen={isOpen} onClose={onClose} title={`Antecipar Parcelas`}>
+            <div className="space-y-4">
+                <p className="font-bold text-slate-200 text-lg">{expense.description}</p>
+                <p>Você pode antecipar até <span className="font-bold">{remainingInstallments}</span> parcelas futuras.</p>
+                
+                <div>
+                    <label className="block mb-1 font-semibold text-slate-300">Quantas parcelas deseja antecipar?</label>
+                    <input 
+                        type="number" 
+                        value={count} 
+                        onChange={(e) => setCount(Math.max(1, Math.min(parseInt(e.target.value) || 1, remainingInstallments)))}
+                        min="1"
+                        max={remainingInstallments}
+                        className="w-full bg-dark-700 p-2 rounded border border-dark-600"
+                    />
                 </div>
-                <div className="p-6 space-y-6">
-                    <p className="text-slate-300">Você está antecipando parcelas de: <strong className="text-slate-100">{expense.description}</strong></p>
-                    
-                    <div className="bg-dark-700/50 p-4 rounded-lg text-center">
-                        <p className="text-slate-400 text-sm">Parcelas Restantes</p>
-                        <p className="text-2xl font-bold text-accent">{remainingInstallments}</p>
-                        <p className="text-slate-400 text-sm mt-1">de {formatCurrency(installmentAmount, isCensored)} cada</p>
-                    </div>
-
-                    {remainingInstallments > 0 ? (
-                        <div>
-                            <label htmlFor="installments-range" className="block mb-2 font-semibold text-slate-300">Quantas parcelas deseja antecipar?</label>
-                            <div className="flex items-center gap-4">
-                                <input
-                                    id="installments-range"
-                                    type="range"
-                                    min="1"
-                                    max={remainingInstallments}
-                                    value={count}
-                                    onChange={(e) => setCount(parseInt(e.target.value, 10))}
-                                    className="w-full h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-accent"
-                                />
-                                <span className="bg-dark-900 font-bold text-accent px-3 py-1 rounded-md text-lg w-20 text-center">{count}</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <p className="text-center text-green-400 font-semibold">Esta despesa já foi totalmente paga!</p>
-                    )}
-                    
-                    <div className="text-center">
-                        <p className="text-slate-400">Valor a ser pago agora:</p>
-                        <p className="text-3xl font-extrabold text-green-400">{formatCurrency(amountToPay, isCensored)}</p>
-                    </div>
+                
+                <div className="bg-dark-700 p-4 rounded-lg text-center">
+                    <p className="text-slate-400">Valor a ser pago agora</p>
+                    <p className="text-2xl font-bold text-accent">{formatCurrency(totalToAnticipate, isCensored)}</p>
                 </div>
-
-                <div className="p-4 bg-dark-700/50 flex justify-end gap-4 rounded-b-lg">
+                
+                <div className="flex justify-end gap-4 pt-4">
                     <button onClick={onClose} className="bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors">
                         Cancelar
                     </button>
-                    <button 
-                        onClick={handleConfirm} 
-                        disabled={remainingInstallments <= 0}
-                        className="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-dark-600 disabled:cursor-not-allowed disabled:text-slate-500"
-                    >
-                       {remainingInstallments > 0 ? `Antecipar ${count} Parcela(s)` : 'Despesa Finalizada'}
+                    <button onClick={() => onConfirm(expense.id, count)} className="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors" disabled={count > remainingInstallments || count <= 0}>
+                        Confirmar Antecipação
                     </button>
                 </div>
             </div>
-        </div>
-    );
-};
+        </Modal>
+    )
+}
