@@ -1087,17 +1087,26 @@ interface FinancialEvolutionPageProps {
 const FinancialEvolutionPage: React.FC<FinancialEvolutionPageProps> = ({ incomes, expenses, isCensored }) => {
     const historicalData = useMemo(() => {
         const data = [];
-        // Start date set to October 2025 as requested. Month is 0-indexed (9 = October).
+        // Start date is October 2025 (month is 0-indexed).
         const startDate = new Date(2025, 9, 1);
-        const totalIncomeEver = incomes.reduce((acc, inc) => acc + inc.amount, 0);
+        const currentDate = new Date();
 
+        // No data to show if current date is before the start date.
+        if (currentDate < startDate) {
+            return [];
+        }
+
+        const totalIncomeEver = incomes.reduce((acc, inc) => acc + inc.amount, 0);
         if (totalIncomeEver === 0 && expenses.length === 0) {
           return [];
         }
+        
+        // Calculate the number of months to display, from startDate up to and including the current month.
+        const monthsToDisplay = (currentDate.getFullYear() - startDate.getFullYear()) * 12 + (currentDate.getMonth() - startDate.getMonth()) + 1;
 
-        // Loop for the next 12 months starting from the defined start date.
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < monthsToDisplay; i++) {
             const date = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+            
             const monthLabel = date.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }).replace(' de', '');
             const targetMonthYear = getMonthYear(date);
             
@@ -1118,13 +1127,23 @@ const FinancialEvolutionPage: React.FC<FinancialEvolutionPageProps> = ({ incomes
         return data;
     }, [incomes, expenses]);
 
+    const startDate = new Date(2025, 9, 1);
+    const currentDate = new Date();
+
+    const getEmptyStateMessage = () => {
+        if (currentDate < startDate) {
+            return "O histórico financeiro começará a ser exibido a partir de Outubro de 2025.";
+        }
+        return "Adicione receitas e despesas para ver sua evolução financeira.";
+    };
+
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-6 text-center">Projeção Financeira (A partir de Out/25)</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-6 text-center">Evolução Financeira (Desde Out/25)</h2>
             {historicalData.length > 0 ? (
                 <FinancialEvolutionChart data={historicalData} isCensored={isCensored} />
             ) : (
-                <p className="text-slate-400 text-center py-10">Adicione receitas e despesas para ver sua projeção financeira.</p>
+                <p className="text-slate-400 text-center py-10">{getEmptyStateMessage()}</p>
             )}
         </div>
     );
@@ -1595,8 +1614,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const categoryData = useMemo(() => {
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
-        // FIX: Explicitly type the accumulator `acc` to resolve arithmetic operation errors and ensure correct type inference.
-        // Fix: Explicitly type the accumulator in `reduce` to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
+        // FIX: Explicitly type the accumulator in `reduce` to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
         const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
             const category = expense.category || 'Outros';
             const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
@@ -1612,8 +1630,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const expensesBySubcategory = useMemo(() => {
         const result: Record<string, { name: string; value: number }[]> = {};
         categoryData.forEach(cat => {
-          // FIX: Explicitly type the accumulator `acc` to resolve arithmetic operation errors and ensure correct type inference for subcategories, which fixes subsequent assignment errors.
-          // Fix: Explicitly type the accumulator in `reduce` to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
+          // FIX: Explicitly type the accumulator in `reduce` to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
           const subcategories = expenses
             .filter(e => e.category === cat.name)
             .reduce((acc: Record<string, number>, expense) => {
