@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -319,7 +320,19 @@ export default function App() {
   const [subcategoryFilter, setSubcategoryFilter] = useState('all');
   const [recurringFilter, setRecurringFilter] = useState('all'); // 'all', 'yes', 'no'
 
-  const totalIncome = useMemo(() => incomes.reduce((acc, inc) => acc + inc.amount, 0), [incomes]);
+  const totalIncome = useMemo(() => {
+    const targetMonthYear = getMonthYear(displayedDate);
+    return incomes
+        .filter(inc => getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear)
+        .reduce((acc, inc) => acc + inc.amount, 0);
+  }, [incomes, displayedDate]);
+
+  const displayedMonthIncomes = useMemo(() => {
+    const targetMonthYear = getMonthYear(displayedDate);
+    return incomes
+      .filter(inc => getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [incomes, displayedDate]);
 
   const calculateMonthlyExpenses = useCallback((date: Date) => {
     return calculateMonthlyExpensesForDate(expenses, date);
@@ -719,7 +732,7 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
                 <div>
                      <IncomeManager 
-                        incomes={incomes}
+                        incomes={displayedMonthIncomes}
                         onAddIncome={handleStartAddIncome}
                         onEditIncome={handleStartEditIncome}
                         onRemoveIncome={removeIncome}
@@ -1076,9 +1089,9 @@ const FinancialEvolutionPage: React.FC<FinancialEvolutionPageProps> = ({ incomes
         const data = [];
         // Start date set to October 2025 as requested. Month is 0-indexed (9 = October).
         const startDate = new Date(2025, 9, 1);
-        const totalMonthlyIncome = incomes.reduce((acc, inc) => acc + inc.amount, 0);
+        const totalIncomeEver = incomes.reduce((acc, inc) => acc + inc.amount, 0);
 
-        if (totalMonthlyIncome === 0 && expenses.length === 0) {
+        if (totalIncomeEver === 0 && expenses.length === 0) {
           return [];
         }
 
@@ -1086,13 +1099,18 @@ const FinancialEvolutionPage: React.FC<FinancialEvolutionPageProps> = ({ incomes
         for (let i = 0; i < 12; i++) {
             const date = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
             const monthLabel = date.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }).replace(' de', '');
+            const targetMonthYear = getMonthYear(date);
+            
+            const monthlyIncome = incomes
+                .filter(inc => getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear)
+                .reduce((acc, inc) => acc + inc.amount, 0);
 
             const monthlyExpenses = calculateMonthlyExpensesForDate(expenses, date);
-            const surplus = totalMonthlyIncome - monthlyExpenses;
+            const surplus = monthlyIncome - monthlyExpenses;
 
             data.push({
                 month: monthLabel,
-                income: totalMonthlyIncome,
+                income: monthlyIncome,
                 expenses: monthlyExpenses,
                 surplus: surplus,
             });
@@ -1577,6 +1595,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const categoryData = useMemo(() => {
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
+        // FIX: Explicitly type the accumulator `acc` to resolve arithmetic operation errors and ensure correct type inference.
         // Fix: Explicitly type the accumulator in `reduce` to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
         const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
             const category = expense.category || 'Outros';
@@ -1593,6 +1612,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const expensesBySubcategory = useMemo(() => {
         const result: Record<string, { name: string; value: number }[]> = {};
         categoryData.forEach(cat => {
+          // FIX: Explicitly type the accumulator `acc` to resolve arithmetic operation errors and ensure correct type inference for subcategories, which fixes subsequent assignment errors.
           // Fix: Explicitly type the accumulator in `reduce` to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
           const subcategories = expenses
             .filter(e => e.category === cat.name)
@@ -1811,12 +1831,15 @@ const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onE
         </div>
         <div className="flex-grow overflow-y-auto max-h-48 pr-2">
             {incomes.length === 0 ? (
-                <p className="text-slate-400 text-center py-10">Nenhuma receita cadastrada.</p>
+                <p className="text-slate-400 text-center py-10">Nenhuma receita cadastrada para este mês.</p>
             ) : (
                 <ul className="space-y-3">
                     {incomes.map(inc => (
                         <li key={inc.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                            <p className="font-semibold self-start">{inc.description}</p>
+                            <div className="flex-grow">
+                                <p className="font-semibold">{inc.description}</p>
+                                <p className="text-xs text-slate-400">{new Date(inc.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                            </div>
                             <div className="flex items-center self-end sm:self-center">
                                 <p className="font-bold text-green-400 mr-4">{formatCurrency(inc.amount, isCensored)}</p>
                                 <button onClick={() => onEditIncome(inc)} className="text-slate-500 hover:text-accent p-1">
@@ -2095,15 +2118,18 @@ const IncomeModal: React.FC<{
 }> = ({ isOpen, onClose, onAddIncome, onUpdateIncome, incomeToEdit }) => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const isEditing = !!incomeToEdit;
 
     useEffect(() => {
         if (incomeToEdit) {
             setDescription(incomeToEdit.description);
             setAmount(incomeToEdit.amount.toString().replace('.', ','));
+            setDate(incomeToEdit.date);
         } else {
             setDescription('');
             setAmount('');
+            setDate(new Date().toISOString().split('T')[0]);
         }
     }, [incomeToEdit]);
 
@@ -2115,13 +2141,14 @@ const IncomeModal: React.FC<{
             return;
         }
 
-        const incomeData = { description, amount: numericAmount };
+        const incomeData = { description, amount: numericAmount, date };
 
-        if (isEditing) {
+        if (isEditing && incomeToEdit) {
             onUpdateIncome({ ...incomeData, id: incomeToEdit.id });
         } else {
             onAddIncome(incomeData);
         }
+        onClose();
     };
 
     return (
@@ -2131,9 +2158,15 @@ const IncomeModal: React.FC<{
                     <label className="block mb-1 font-semibold text-slate-300">Descrição</label>
                     <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="Ex: Salário, Adiantamento" />
                 </div>
-                <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Valor</label>
-                    <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Valor</label>
+                        <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    </div>
+                     <div>
+                        <label className="block mb-1 font-semibold text-slate-300">Data</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
+                    </div>
                 </div>
                 <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar'}</button>
             </form>
