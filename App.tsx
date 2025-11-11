@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -179,8 +180,10 @@ const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): numbe
         
         const installmentAmount = expense.amount / expense.installments.total;
         for (let i = 0; i < expense.installments.total; i++) {
-          const installmentDate = new Date(firstPaymentDate);
-          installmentDate.setMonth(firstPaymentDate.getMonth() + i);
+          const installmentDate = new Date(firstPaymentDate.getFullYear(), firstPaymentDate.getMonth() + i, 1);
+          const daysInMonth = new Date(installmentDate.getFullYear(), installmentDate.getMonth() + 1, 0).getDate();
+          installmentDate.setDate(Math.min(firstPaymentDate.getDate(), daysInMonth));
+          
           if (getMonthYear(installmentDate) === targetMonthYear) {
             return total + installmentAmount;
           }
@@ -370,8 +373,10 @@ export default function App() {
               firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
           }
           for (let i = 0; i < expense.installments.total; i++) {
-            const installmentDate = new Date(firstPaymentDate);
-            installmentDate.setMonth(firstPaymentDate.getMonth() + i);
+            const installmentDate = new Date(firstPaymentDate.getFullYear(), firstPaymentDate.getMonth() + i, 1);
+            const daysInMonth = new Date(installmentDate.getFullYear(), installmentDate.getMonth() + 1, 0).getDate();
+            installmentDate.setDate(Math.min(firstPaymentDate.getDate(), daysInMonth));
+
             if (getMonthYear(installmentDate) === displayedMonthKey) {
                 return true;
             }
