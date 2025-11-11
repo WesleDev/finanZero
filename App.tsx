@@ -1,6 +1,9 @@
 
 
 
+
+
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -1484,75 +1487,58 @@ const MonthlyAlert: React.FC<{ current: number; previous: number; isCensored: bo
 const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, isCensored: boolean }> = ({ expenses, displayedDate, isCensored }) => {
     const CARD_CLOSING_DAY = 15;
 
-    const { currentBill, futureDebt, totalDebt } = useMemo(() => {
+    const { currentBill, futureDebt } = useMemo(() => {
         const creditCardExpenses = expenses.filter(e => e.category === 'Cartão de Crédito');
-        
-        // Calculate Current Bill
         const displayedMonthKey = getMonthYear(displayedDate);
-        const currentBillExpenses = creditCardExpenses.filter(expense => {
+
+        let bill = 0;
+        let future = 0;
+
+        creditCardExpenses.forEach(expense => {
             if (expense.isRecurring) {
                 const effectiveStartDate = new Date(expense.date + 'T00:00:00');
                 if (effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
                     effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
                 }
                 const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
-                return effectiveStartMonthYear <= displayedMonthKey;
-            }
-
-            if (expense.installments) {
+                if (effectiveStartMonthYear <= displayedMonthKey) {
+                    bill += expense.amount;
+                }
+            } else if (expense.installments) {
+                const installmentAmount = expense.amount / expense.installments.total;
                 const firstPaymentDate = new Date(expense.date + 'T00:00:00');
                 if (firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
                     firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
                 }
+
                 for (let i = 0; i < expense.installments.total; i++) {
-                    const installmentDate = new Date(firstPaymentDate);
-                    installmentDate.setMonth(firstPaymentDate.getMonth() + i);
-                    if (getMonthYear(installmentDate) === displayedMonthKey) {
-                        return true;
+                    const installmentDate = new Date(firstPaymentDate.getFullYear(), firstPaymentDate.getMonth() + i, 1);
+                    const daysInMonth = new Date(installmentDate.getFullYear(), installmentDate.getMonth() + 1, 0).getDate();
+                    installmentDate.setDate(Math.min(firstPaymentDate.getDate(), daysInMonth));
+
+                    const installmentMonthKey = getMonthYear(installmentDate);
+                    
+                    if (installmentMonthKey === displayedMonthKey) {
+                        bill += installmentAmount;
+                    } else if (installmentMonthKey > displayedMonthKey) {
+                        future += installmentAmount;
                     }
                 }
-                return false;
+            } else { // one-time
+                const effectiveDate = new Date(expense.date + 'T00:00:00');
+                if (effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+                    effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+                }
+                if (getMonthYear(effectiveDate) === displayedMonthKey) {
+                    bill += expense.amount;
+                }
             }
-            
-            const effectiveDate = new Date(expense.date + 'T00:00:00');
-            if (effectiveDate.getDate() >= CARD_CLOSING_DAY) {
-                effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-            }
-            return getMonthYear(effectiveDate) === displayedMonthKey;
         });
 
-        const currentBill = currentBillExpenses.reduce((acc, exp) => {
-            const amount = exp.installments ? exp.amount / exp.installments.total : exp.amount;
-            return acc + amount;
-        }, 0);
-
-        // Calculate Future Debt from installments
-        const installmentExpenses = creditCardExpenses.filter(e => e.installments);
-        const futureDebt = installmentExpenses.reduce((totalFutureDebt, expense) => {
-            const installmentAmount = expense.amount / expense.installments!.total;
-            
-            const firstPaymentDate = new Date(expense.date + 'T00:00:00');
-            if (firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-                firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
-            }
-
-            const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
-            
-            const paidInstallments = monthsDiff < 0 ? 0 : monthsDiff + 1;
-
-            if (paidInstallments >= expense.installments!.total) {
-                return totalFutureDebt;
-            }
-            
-            const remainingInstallments = expense.installments!.total - paidInstallments;
-            
-            return totalFutureDebt + (remainingInstallments * installmentAmount);
-        }, 0);
-        
-        const totalDebt = currentBill + futureDebt;
-
-        return { currentBill, futureDebt, totalDebt };
+        return { currentBill: bill, futureDebt: future };
     }, [expenses, displayedDate]);
+
+    const totalDebt = currentBill + futureDebt;
 
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
@@ -1620,7 +1606,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
         // FIX: Explicitly type the accumulator in `reduce` to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
-        const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
+        const expensesByCategory = expenses.reduce((acc, expense) => {
             const category = expense.category || 'Outros';
             const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
             acc[category] = (acc[category] || 0) + amount;
@@ -1638,7 +1624,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
           // FIX: Explicitly type the accumulator in `reduce` to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
           const subcategories = expenses
             .filter(e => e.category === cat.name)
-            .reduce((acc: Record<string, number>, expense) => {
+            .reduce((acc, expense) => {
               const subcatName = expense.subcategory || 'Outros';
               const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
               acc[subcatName] = (acc[subcatName] || 0) + amount;
