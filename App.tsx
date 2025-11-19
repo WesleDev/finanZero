@@ -724,7 +724,7 @@ export default function App() {
                 monthlyExpensesList={displayedMonthExpensesList}
                 isCensored={isCensored}
             />
-            <div className="mt-8 space-y-8">
+            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                  <IncomeManager 
                     incomes={displayedMonthIncomes}
                     onAddIncome={handleStartAddIncome}
@@ -756,7 +756,6 @@ export default function App() {
         {activeTab === 'investments' && (
           <InvestmentsPage
             jars={jars}
-            // Fix: Pass the 'removeJar' function to the 'onRemoveJar' prop of the InvestmentsPage component, resolving a reference error where 'onRemoveJar' was used as both the prop name and the value.
             onRemoveJar={removeJar}
             onAddJar={() => setJarModalOpen(true)}
             expensesForMonth={displayedMonthExpensesList}
@@ -1579,13 +1578,12 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const categoryData = useMemo(() => {
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
-        // FIX: Explicitly type the accumulator in `reduce` to ensure correct type inference for `expensesByCategory`, resolving arithmetic operation errors.
-        const expensesByCategory = expenses.reduce((acc, expense) => {
+        const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
             const category = expense.category || 'Outros';
             const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
             acc[category] = (acc[category] || 0) + amount;
             return acc;
-        }, {} as Record<string, number>);
+        }, {});
         
         return Object.entries(expensesByCategory)
             .map(([name, value], index) => ({ name, value, color: COLORS[index % COLORS.length] }))
@@ -1595,15 +1593,14 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const expensesBySubcategory = useMemo(() => {
         const result: Record<string, { name: string; value: number }[]> = {};
         categoryData.forEach(cat => {
-          // FIX: Explicitly type the accumulator in `reduce` to ensure correct type inference for `subcategories`, resolving type assignment and arithmetic operation errors.
           const subcategories = expenses
             .filter(e => e.category === cat.name)
-            .reduce((acc, expense) => {
+            .reduce((acc: Record<string, number>, expense) => {
               const subcatName = expense.subcategory || 'Outros';
               const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
               acc[subcatName] = (acc[subcatName] || 0) + amount;
               return acc;
-            }, {} as Record<string, number>);
+            }, {});
             
           result[cat.name] = Object.entries(subcategories)
             .map(([name, value]) => ({ name, value }))
@@ -1879,22 +1876,24 @@ const ExpenseFilter: React.FC<ExpenseFilterProps> = ({
         </div>
         <div>
           <label className="block mb-1 text-sm font-semibold text-slate-300">Subcategoria</label>
-          <select value={subcategoryFilter} onChange={e => setSubcategoryFilter(e.target.value)} disabled={categoryFilter === 'all' || availableSubcategories.length === 0} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+          <select value={subcategoryFilter} onChange={e => setSubcategoryFilter(e.target.value)} disabled={categoryFilter === 'all'} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm disabled:opacity-50">
             <option value="all">Todas</option>
             {availableSubcategories.map(sub => <option key={sub} value={sub}>{sub}</option>)}
           </select>
         </div>
         <div>
-          <label className="block mb-1 text-sm font-semibold text-slate-300">Tipo</label>
-          <select value={recurringFilter} onChange={e => setRecurringFilter(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm">
-            <option value="all">Todos</option>
-            <option value="yes">Recorrentes</option>
-            <option value="no">Não Recorrentes</option>
-          </select>
+            <label className="block mb-1 text-sm font-semibold text-slate-300">Tipo</label>
+             <select value={recurringFilter} onChange={e => setRecurringFilter(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm">
+                <option value="all">Todos</option>
+                <option value="yes">Recorrente</option>
+                <option value="no">Pontual / Parcelado</option>
+            </select>
         </div>
-        <button onClick={handleClearFilters} className="w-full bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors text-sm">
-          Limpar Filtros
-        </button>
+        <div>
+            <button onClick={handleClearFilters} className="w-full bg-dark-600 hover:bg-dark-500 text-slate-300 font-bold py-2 px-3 rounded transition-colors text-sm">
+                Limpar Filtros
+            </button>
+        </div>
       </div>
     </div>
   );
@@ -1911,199 +1910,178 @@ interface ExpenseManagerProps {
   onNextMonth: () => void;
   isCensored: boolean;
   categoryFilter: string;
-  setCategoryFilter: (value: string) => void;
+  setCategoryFilter: (val: string) => void;
   subcategoryFilter: string;
-  setSubcategoryFilter: (value: string) => void;
+  setSubcategoryFilter: (val: string) => void;
   recurringFilter: string;
-  setRecurringFilter: (value: string) => void;
+  setRecurringFilter: (val: string) => void;
 }
 
-const ExpenseManager: React.FC<ExpenseManagerProps> = ({ expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onAnticipateInstallment, onPreviousMonth, onNextMonth, isCensored, ...filterProps }) => {
-  const monthYearDisplay = displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-    
-  return (
+const ExpenseManager: React.FC<ExpenseManagerProps> = ({
+    expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onAnticipateInstallment,
+    onPreviousMonth, onNextMonth, isCensored,
+    categoryFilter, setCategoryFilter,
+    subcategoryFilter, setSubcategoryFilter,
+    recurringFilter, setRecurringFilter,
+}) => {
+    return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-                <div className="flex items-center gap-2 self-center sm:self-auto">
-                    <h2 className="text-2xl font-bold text-slate-100 hidden sm:block">Despesas</h2>
-                     <button onClick={onPreviousMonth} className="p-2 rounded-full hover:bg-dark-700 transition-colors">
-                        <ChevronLeftIcon />
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <button onClick={onPreviousMonth} className="p-1 rounded hover:bg-dark-700 text-slate-400 hover:text-white">
+                         <ChevronLeftIcon />
                     </button>
-                    <span className="font-semibold text-lg text-slate-400 capitalize w-36 text-center">{monthYearDisplay}</span>
-                    <button onClick={onNextMonth} className="p-2 rounded-full hover:bg-dark-700 transition-colors">
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-100 capitalize">
+                        {displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                    </h2>
+                    <button onClick={onNextMonth} className="p-1 rounded hover:bg-dark-700 text-slate-400 hover:text-white">
                         <ChevronRightIcon />
                     </button>
                 </div>
-                <button onClick={onAddExpense} className="flex items-center justify-center bg-primary hover:bg-secondary text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
+                <button onClick={onAddExpense} className="flex items-center bg-danger hover:bg-red-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
                     <PlusIcon className="h-5 w-5" />
                     <span className="hidden sm:inline ml-2">Adicionar</span>
                 </button>
             </div>
-            <ExpenseFilter {...filterProps} />
-            <div className="flex-grow overflow-y-auto max-h-96 pr-2">
-            {expenses.length === 0 ? (
-                <p className="text-slate-400 text-center py-10">Nenhuma despesa encontrada para este mês com os filtros aplicados.</p>
-            ) : (
-                <ul className="space-y-3">
-                    {expenses.map(exp => {
-                        let currentInstallment = 0;
-                        if(exp.installments){
-                            const CARD_CLOSING_DAY = 15;
-                            const firstPaymentDate = new Date(exp.date + 'T00:00:00');
-                            if (exp.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-                                firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
-                            }
-                            const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
-                            currentInstallment = monthsDiff + 1;
-                        }
-                        
-                        const billingDate = getBillingDayInMonth(exp.date, displayedDate);
 
-                        return(
-                            <li key={exp.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                <div className="w-full">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <p className="font-semibold">{exp.description}</p>
-                                        {exp.isRecurring && <RecurringIcon />}
-                                    </div>
-                                    <div className="text-sm text-slate-400 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                                        <span className="bg-dark-600 px-2 py-0.5 rounded-full text-xs font-medium">
-                                            {exp.category} {exp.subcategory ? `> ${exp.subcategory}` : ''}
-                                        </span>
-                                        <span className="flex items-center gap-1 text-xs">
-                                            <CalendarIcon className="h-4 w-4 text-slate-500" />
-                                            {billingDate.toLocaleDateString('pt-BR')}
-                                        </span>
-                                        {exp.installments && (
-                                            <div className="flex-grow w-full sm:w-auto">
-                                                <span>Parcela {currentInstallment}/{exp.installments.total}</span>
-                                                <div className="w-full bg-dark-900 rounded-full h-1.5 mt-1">
-                                                    <div className="bg-accent h-1.5 rounded-full" style={{ width: `${(currentInstallment / exp.installments.total) * 100}%` }}></div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center self-end sm:self-center">
-                                    <p className="font-bold text-red-400 mr-4">
-                                        {formatCurrency(exp.installments ? exp.amount / exp.installments.total : exp.amount, isCensored)}
-                                    </p>
-                                    {exp.installments && (
-                                        <button onClick={() => onAnticipateInstallment(exp.id)} className="text-slate-500 hover:text-blue-400 p-1" title="Antecipar Parcelas">
-                                            <FastForwardIcon />
-                                        </button>
-                                    )}
-                                    <button onClick={() => onEditExpense(exp)} className="text-slate-500 hover:text-accent p-1">
-                                        <EditIcon />
-                                    </button>
-                                    <button onClick={() => onRemoveExpense(exp.id)} className="text-slate-500 hover:text-danger p-1">
-                                        <TrashIcon />
-                                    </button>
-                                </div>
-                            </li>
-                        )}
-                    )}
-                </ul>
-            )}
-            </div>
-        </div>
-    );
-};
+            <ExpenseFilter 
+                categoryFilter={categoryFilter}
+                setCategoryFilter={setCategoryFilter}
+                subcategoryFilter={subcategoryFilter}
+                setSubcategoryFilter={setSubcategoryFilter}
+                recurringFilter={recurringFilter}
+                setRecurringFilter={setRecurringFilter}
+            />
 
-const SavingsManager: React.FC<{ 
-    jars: {id: string, name: string}[], 
-    percentages: Record<string, number>,
-    surplus: number, 
-    onAddJar: () => void, 
-    onPercentageChange: (id: string, p: number) => void, 
-    onRemoveJar: (id: string) => void,
-    isCensored: boolean
-}> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar, isCensored }) => {
-    
-    const totalPercentage = useMemo(() => {
-        return jars.reduce((acc, jar) => acc + (percentages[jar.id] || 0), 0);
-    }, [jars, percentages]);
-
-    const isDistributionDisabled = surplus <= 0;
-
-    return (
-        <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-slate-100">Caixinhas</h2>
-                <button onClick={onAddJar} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
-                    <PlusIcon className="h-5 w-5" />
-                     <span className="hidden sm:inline ml-2">Criar</span>
-                </button>
-            </div>
-            
-            {isDistributionDisabled && jars.length > 0 && (
-                <div className="bg-yellow-500/20 text-yellow-300 p-3 rounded-lg mb-4 flex items-center gap-2">
-                    <ExclamationIcon className="h-5 w-5" />
-                    <p>Saldo insuficiente para distribuir. Os valores não serão aplicados.</p>
-                </div>
-            )}
-
-            <div className="flex-grow">
-                <div className="mb-4">
-                    <div className="w-full bg-dark-600 rounded-full h-4">
-                        <div className={`rounded-full h-4 text-xs flex items-center justify-center text-white ${totalPercentage > 100 ? 'bg-danger' : 'bg-success'}`} style={{ width: `${Math.min(totalPercentage, 100)}%` }}>{totalPercentage}%</div>
-                    </div>
-                    {totalPercentage > 100 && (
-                        <div className="text-danger text-sm mt-2 flex items-center gap-1">
-                            <ExclamationIcon className="h-4 w-4" />
-                            <span>Total não pode exceder 100%.</span>
-                        </div>
-                    )}
-                    {totalPercentage < 100 && totalPercentage > 0 && <p className="text-yellow-400 text-sm mt-1">Faltam {100-totalPercentage}% para distribuir.</p>}
-                </div>
-                {jars.length === 0 ? (
-                        <p className="text-slate-400 text-center py-10">Crie caixinhas para guardar o dinheiro que sobra.</p>
+             <div className="flex-grow overflow-y-auto max-h-96 pr-2">
+                {expenses.length === 0 ? (
+                    <p className="text-slate-400 text-center py-10">Nenhum gasto encontrado para este mês.</p>
                 ) : (
-                <ul className="space-y-3 max-h-80 overflow-y-auto pr-2">
-                    {jars.map(jar => {
-                        const percentage = percentages[jar.id] || 0;
-                        return (
-                            <li key={jar.id} className="bg-dark-700 p-3 rounded-lg">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
-                                    <span className="font-semibold self-start sm:self-center">{jar.name}</span>
-                                    <div className="flex items-center gap-2 self-end sm:self-center">
-                                        <input 
-                                          type="number" 
-                                          value={percentage} 
-                                          onChange={(e) => onPercentageChange(jar.id, parseInt(e.target.value) || 0)} 
-                                          className="w-16 bg-dark-600 text-center rounded p-1 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                          disabled={isDistributionDisabled}
-                                        />
-                                        <span>%</span>
-                                        <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger">
-                                            <TrashIcon />
-                                        </button>
+                    <ul className="space-y-3">
+                        {expenses.map(expense => {
+                             const isInstallment = !!expense.installments;
+                             const amount = isInstallment ? (expense.amount / expense.installments!.total) : expense.amount;
+
+                             return (
+                                <li key={expense.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-l-4 border-l-transparent hover:border-l-accent transition-all">
+                                    <div className="flex-grow">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-semibold">{expense.description}</span>
+                                            {expense.isRecurring && <RecurringIcon />}
+                                            {isInstallment && <span className="text-xs bg-dark-600 px-1 rounded text-slate-400">Parcelado</span>}
+                                            {expense.category === 'Cartão de Crédito' && <CreditCardIcon className="h-4 w-4 text-amber-400" />}
+                                        </div>
+                                        <div className="text-xs text-slate-400 flex gap-2 mt-1">
+                                            <span className="bg-dark-600 px-2 py-0.5 rounded">{expense.category}</span>
+                                            {expense.subcategory && <span className="bg-dark-600 px-2 py-0.5 rounded">{expense.subcategory}</span>}
+                                            <span>{new Date(expense.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                                        </div>
                                     </div>
-                                </div>
-                                <p className="text-accent font-bold mt-1 text-right sm:text-left">{formatCurrency((surplus * percentage) / 100, isCensored)}</p>
-                            </li>
-                        )
-                    })}
-                </ul>
+                                    <div className="flex items-center self-end sm:self-center gap-4">
+                                        <div className="text-right">
+                                            <p className="font-bold text-red-400">{formatCurrency(amount, isCensored)}</p>
+                                            {isInstallment && (
+                                                <p className="text-xs text-slate-500">Total: {formatCurrency(expense.amount, isCensored)} ({expense.installments?.total}x)</p>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center">
+                                            {isInstallment && (
+                                                 <button onClick={() => onAnticipateInstallment(expense.id)} title="Antecipar Parcelas" className="text-slate-500 hover:text-blue-400 p-1 mr-1">
+                                                    <FastForwardIcon />
+                                                </button>
+                                            )}
+                                            <button onClick={() => onEditExpense(expense)} className="text-slate-500 hover:text-accent p-1">
+                                                <EditIcon />
+                                            </button>
+                                            <button onClick={() => onRemoveExpense(expense.id)} className="text-slate-500 hover:text-danger p-1">
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </li>
+                             );
+                        })}
+                    </ul>
                 )}
             </div>
         </div>
     );
 };
 
-const IncomeModal: React.FC<{ 
-    isOpen: boolean, 
-    onClose: () => void, 
-    onAddIncome: (income: Omit<Income, 'id'>) => void,
-    onUpdateIncome: (income: Income) => void,
-    incomeToEdit: Income | null
-}> = ({ isOpen, onClose, onAddIncome, onUpdateIncome, incomeToEdit }) => {
-    const [description, setDescription] = useState('');
-    const [amount, setAmount] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const isEditing = !!incomeToEdit;
+interface SavingsManagerProps {
+    jars: SavingsJar[];
+    percentages: Record<string, number>;
+    surplus: number;
+    onAddJar: () => void;
+    onPercentageChange: (id: string, percentage: number) => void;
+    onRemoveJar: (id: string) => void;
+    isCensored: boolean;
+}
 
-    useEffect(() => {
+const SavingsManager: React.FC<SavingsManagerProps> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar, isCensored }) => {
+    const totalPercentage = jars.reduce((acc, jar) => acc + (percentages[jar.id] || 0), 0);
+
+    return (
+        <div className="space-y-4">
+            {jars.map(jar => {
+                const percentage = percentages[jar.id] || 0;
+                const amount = (surplus > 0 ? surplus : 0) * (percentage / 100);
+                return (
+                    <div key={jar.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center">
+                         <div>
+                            <p className="font-semibold">{jar.name}</p>
+                             <p className="text-sm text-slate-400">{formatCurrency(amount, isCensored)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                             <div className="relative w-20">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={percentage}
+                                    onChange={(e) => onPercentageChange(jar.id, Number(e.target.value))}
+                                    className="w-full bg-dark-600 p-1 rounded text-right pr-6 focus:outline-none focus:ring-1 focus:ring-accent"
+                                />
+                                <span className="absolute right-2 top-1 text-slate-400">%</span>
+                             </div>
+                             <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger p-1">
+                                <TrashIcon />
+                            </button>
+                        </div>
+                    </div>
+                );
+            })}
+            
+            <button onClick={onAddJar} className="w-full border-2 border-dashed border-dark-600 rounded-lg p-3 flex justify-center items-center text-slate-400 hover:text-white hover:border-slate-400 transition-colors">
+                 <PlusIcon className="h-5 w-5 mr-2" />
+                 Nova Caixinha
+            </button>
+
+             <div className="flex justify-between items-center text-sm mt-2 px-1">
+                <span className={totalPercentage > 100 ? "text-red-400 font-bold" : "text-slate-400"}>
+                    Total Distribuído: {totalPercentage}%
+                </span>
+                 {totalPercentage > 100 && <span className="text-red-400 text-xs">Total excede 100%</span>}
+            </div>
+        </div>
+    );
+};
+
+interface IncomeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAddIncome: (income: Omit<Income, 'id'>) => void;
+  onUpdateIncome: (income: Income) => void;
+  incomeToEdit: Income | null;
+}
+
+const IncomeModal: React.FC<IncomeModalProps> = ({ isOpen, onClose, onAddIncome, onUpdateIncome, incomeToEdit }) => {
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    if (isOpen) {
         if (incomeToEdit) {
             setDescription(incomeToEdit.description);
             setAmount(incomeToEdit.amount.toString().replace('.', ','));
@@ -2113,258 +2091,226 @@ const IncomeModal: React.FC<{
             setAmount('');
             setDate(new Date().toISOString().split('T')[0]);
         }
-    }, [incomeToEdit]);
+    }
+  }, [isOpen, incomeToEdit]);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const numericAmount = parseCurrencyInput(amount);
-        if (numericAmount <= 0) {
-            alert('Por favor, insira um valor válido.');
-            return;
-        }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmount = parseCurrencyInput(amount);
+    if (!description || numericAmount <= 0) return;
 
-        const incomeData = { description, amount: numericAmount, date };
+    const incomeData = { description, amount: numericAmount, date };
+    
+    if (incomeToEdit) {
+        onUpdateIncome({ ...incomeData, id: incomeToEdit.id });
+    } else {
+        onAddIncome(incomeData);
+    }
+  };
 
-        if (isEditing && incomeToEdit) {
-            onUpdateIncome({ ...incomeData, id: incomeToEdit.id });
-        } else {
-            onAddIncome(incomeData);
-        }
-        onClose();
-    };
-
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Editar Receita' : 'Adicionar Receita'}>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Descrição</label>
-                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="Ex: Salário, Adiantamento" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Valor</label>
-                        <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                    </div>
-                     <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Data</label>
-                        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                    </div>
-                </div>
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar'}</button>
-            </form>
-        </Modal>
-    );
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={incomeToEdit ? "Editar Receita" : "Nova Receita"}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block mb-1 text-slate-300">Descrição</label>
+          <input
+            type="text"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white"
+            required
+          />
+        </div>
+        <div>
+          <label className="block mb-1 text-slate-300">Valor</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white"
+            placeholder="R$ 0,00"
+            required
+          />
+        </div>
+        <div>
+          <label className="block mb-1 text-slate-300">Data</label>
+           <div className="relative">
+            <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white appearance-none"
+                required
+            />
+             <CalendarIcon className="absolute right-3 top-2.5 h-5 w-5 text-slate-400 pointer-events-none"/>
+           </div>
+        </div>
+        <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors mt-6">
+          Salvar
+        </button>
+      </form>
+    </Modal>
+  );
 };
 
-const ExpenseModal: React.FC<{ 
-    isOpen: boolean, 
-    onClose: () => void, 
-    onAddExpense: (expense: Omit<Expense, 'id'>) => void,
-    onUpdateExpense: (expense: Expense) => void,
-    expenseToEdit: Expense | null
-}> = ({ isOpen, onClose, onAddExpense, onUpdateExpense, expenseToEdit }) => {
+interface ExpenseModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAddExpense: (expense: Omit<Expense, 'id'>) => void;
+  onUpdateExpense: (expense: Expense) => void;
+  expenseToEdit: Expense | null;
+}
+
+const ExpenseModal: React.FC<ExpenseModalProps> = ({ isOpen, onClose, onAddExpense, onUpdateExpense, expenseToEdit }) => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+    const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
     const [subcategory, setSubcategory] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
-    const [isInstallment, setIsInstallment] = useState(false);
-    const [installments, setInstallments] = useState('2');
-    const [currentInstallment, setCurrentInstallment] = useState('1');
-
-    const isEditing = !!expenseToEdit;
-    const availableSubcategories = SUBCATEGORIES[category as keyof typeof SUBCATEGORIES];
-
-    const resetForm = useCallback(() => {
-        setDescription('');
-        setAmount('');
-        setDate(new Date().toISOString().split('T')[0]);
-        setCategory(EXPENSE_CATEGORIES[0]);
-        setSubcategory(SUBCATEGORIES[EXPENSE_CATEGORIES[0] as keyof typeof SUBCATEGORIES]?.[0] || '');
-        setIsRecurring(false);
-        setIsInstallment(false);
-        setInstallments('2');
-        setCurrentInstallment('1');
-    }, []);
-
+    const [installments, setInstallments] = useState('');
+    
     useEffect(() => {
-      if (!isEditing && category) {
-        setSubcategory(SUBCATEGORIES[category as keyof typeof SUBCATEGORIES]?.[0] || '');
-      }
-    }, [category, isEditing]);
-
-    useEffect(() => {
-        if (expenseToEdit) {
-            setDescription(expenseToEdit.description);
-            setAmount(expenseToEdit.amount.toString().replace('.', ','));
-            setDate(expenseToEdit.date);
-            setCategory(expenseToEdit.category);
-            setSubcategory(expenseToEdit.subcategory || '');
-            setIsRecurring(expenseToEdit.isRecurring);
-            setIsInstallment(!!expenseToEdit.installments);
-            setInstallments(expenseToEdit.installments ? expenseToEdit.installments.total.toString() : '2');
-        } else {
-            resetForm();
+        if (isOpen) {
+            if (expenseToEdit) {
+                setDescription(expenseToEdit.description);
+                setAmount(expenseToEdit.amount.toString().replace('.', ','));
+                setDate(expenseToEdit.date);
+                setCategory(expenseToEdit.category);
+                setSubcategory(expenseToEdit.subcategory || '');
+                setIsRecurring(expenseToEdit.isRecurring);
+                setInstallments(expenseToEdit.installments ? expenseToEdit.installments.total.toString() : '');
+            } else {
+                setDescription('');
+                setAmount('');
+                setDate(new Date().toISOString().split('T')[0]);
+                setCategory(EXPENSE_CATEGORIES[0]);
+                setSubcategory('');
+                setIsRecurring(false);
+                setInstallments('');
+            }
         }
-    }, [expenseToEdit, resetForm]);
+    }, [isOpen, expenseToEdit]);
+
+    useEffect(() => {
+        if (category && SUBCATEGORIES[category] && !SUBCATEGORIES[category].includes(subcategory)) {
+             setSubcategory(SUBCATEGORIES[category][0] || '');
+        }
+    }, [category]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const numericAmount = parseCurrencyInput(amount);
+        if (!description || numericAmount <= 0) return;
 
-        if (numericAmount <= 0) {
-            alert('Por favor, insira um valor válido.');
-            return;
-        }
-
-        const expenseData: Omit<Expense, 'id'> = {
+        const expenseData: any = {
             description,
             amount: numericAmount,
             date,
             category,
-            subcategory: subcategory === 'Outros' || !subcategory ? undefined : subcategory,
-            isRecurring,
-            installments: isInstallment ? { total: parseInt(installments) } : undefined,
+            subcategory: subcategory || undefined,
+            isRecurring
         };
         
-        if (isEditing) {
+        if (installments && parseInt(installments) > 1) {
+             expenseData.installments = { total: parseInt(installments) };
+             expenseData.isRecurring = false; // Cannot be both
+        }
+
+        if (expenseToEdit) {
             onUpdateExpense({ ...expenseData, id: expenseToEdit.id });
         } else {
             onAddExpense(expenseData);
         }
     };
-    
-    const handleClose = () => {
-        resetForm();
-        onClose();
-    };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title={isEditing ? 'Editar Despesa' : 'Adicionar Despesa'}>
+        <Modal isOpen={isOpen} onClose={onClose} title={expenseToEdit ? "Editar Despesa" : "Nova Despesa"}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Descrição</label>
-                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" placeholder="Ex: Compra no Supermercado" />
+                    <label className="block mb-1 text-slate-300">Descrição</label>
+                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" required />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Valor {isInstallment ? 'Total' : ''}</label>
-                        <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                    </div>
-                     <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Data da Transação</label>
-                        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" />
-                    </div>
+                <div>
+                    <label className="block mb-1 text-slate-300">Valor Total</label>
+                    <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="R$ 0,00" required />
                 </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Categoria</label>
-                        <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent">
+                         <label className="block mb-1 text-slate-300">Data</label>
+                        <div className="relative">
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white appearance-none" required />
+                             <CalendarIcon className="absolute right-3 top-2.5 h-5 w-5 text-slate-400 pointer-events-none"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block mb-1 text-slate-300">Categoria</label>
+                        <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white">
                             {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                         </select>
                     </div>
-                    <div>
-                        <label className="block mb-1 font-semibold text-slate-300">Subcategoria</label>
-                        <select value={subcategory} onChange={e => setSubcategory(e.target.value)} disabled={!availableSubcategories || availableSubcategories.length === 0} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50">
-                            {availableSubcategories?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
-                        </select>
-                    </div>
                 </div>
-                <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={isRecurring} onChange={e => { setIsRecurring(e.target.checked); if(e.target.checked) setIsInstallment(false); }} className="form-checkbox h-5 w-5 text-accent bg-dark-700 border-dark-600 rounded focus:ring-accent" />
-                        <span>É recorrente?</span>
-                    </label>
-                     <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={isInstallment} onChange={e => { setIsInstallment(e.target.checked); if(e.target.checked) setIsRecurring(false); }} className="form-checkbox h-5 w-5 text-accent bg-dark-700 border-dark-600 rounded focus:ring-accent" />
-                        <span>É parcelado?</span>
-                    </label>
+                <div>
+                     <label className="block mb-1 text-slate-300">Subcategoria</label>
+                     <select value={subcategory} onChange={e => setSubcategory(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white">
+                        {SUBCATEGORIES[category]?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                     </select>
                 </div>
-
-                {isInstallment && !isEditing && (
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block mb-1 font-semibold text-slate-300">Total de Parcelas</label>
-                            <input type="number" value={installments} onChange={e => setInstallments(e.target.value)} min="2" className="w-full bg-dark-700 p-2 rounded border border-dark-600" />
-                        </div>
-                    </div>
-                )}
                 
-                {isInstallment && isEditing && (
-                    <p className="text-sm text-yellow-400">Não é possível editar o número de parcelas de uma despesa existente. Crie uma nova despesa se necessário.</p>
-                )}
+                <div className="flex gap-4 items-center pt-2">
+                     <label className="flex items-center cursor-pointer">
+                        <input type="checkbox" checked={isRecurring} onChange={e => { setIsRecurring(e.target.checked); if(e.target.checked) setInstallments(''); }} className="form-checkbox h-5 w-5 text-accent rounded border-dark-600 bg-dark-700 focus:ring-accent" />
+                        <span className="ml-2 text-slate-300">Gasto Recorrente (Mensal)</span>
+                    </label>
+                </div>
+                 {!isRecurring && (
+                    <div>
+                         <label className="block mb-1 text-slate-300">Parcelas (Opcional)</label>
+                         <input type="number" min="1" value={installments} onChange={e => setInstallments(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="Ex: 12" />
+                         <p className="text-xs text-slate-500 mt-1">Deixe em branco para pagamento único.</p>
+                    </div>
+                 )}
 
-
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">{isEditing ? 'Salvar Alterações' : 'Adicionar Despesa'}</button>
+                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors mt-6">
+                    Salvar
+                </button>
             </form>
         </Modal>
     );
 };
 
-const JarModal: React.FC<{ 
-    isOpen: boolean, 
-    onClose: () => void, 
-    onAddJar: (jar: Omit<SavingsJar, 'id'>) => void
-}> = ({ isOpen, onClose, onAddJar }) => {
+interface JarModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onAddJar: (jar: Omit<SavingsJar, 'id'>) => void;
+}
+
+const JarModal: React.FC<JarModalProps> = ({ isOpen, onClose, onAddJar }) => {
     const [name, setName] = useState('');
     const [percentage, setPercentage] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const numericPercentage = parseInt(percentage, 10);
-        if (!name.trim()) {
-            alert('Por favor, insira um nome para a caixinha.');
-            return;
-        }
-        if (isNaN(numericPercentage) || numericPercentage < 0 || numericPercentage > 100) {
-            alert('Por favor, insira uma porcentagem válida entre 0 e 100.');
-            return;
-        }
-
-        onAddJar({ name, percentage: numericPercentage });
+        if (!name || !percentage) return;
+        
+        onAddJar({ name, percentage: parseFloat(percentage) });
         setName('');
         setPercentage('');
     };
-    
-    const handleClose = () => {
-        setName('');
-        setPercentage('');
-        onClose();
-    }
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Criar Nova Caixinha">
+        <Modal isOpen={isOpen} onClose={onClose} title="Nova Caixinha">
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Nome da Caixinha</label>
-                    <input 
-                        type="text" 
-                        value={name} 
-                        onChange={e => setName(e.target.value)} 
-                        required 
-                        className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent" 
-                        placeholder="Ex: Viagem, Reserva de Emergência" 
-                    />
+                    <label className="block mb-1 text-slate-300">Nome da Caixinha</label>
+                    <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="Ex: Viagem, Reserva de Emergência" required />
                 </div>
                 <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Porcentagem Inicial (%)</label>
-                    <input 
-                        type="number" 
-                        inputMode="numeric" 
-                        value={percentage} 
-                        onChange={e => setPercentage(e.target.value)} 
-                        required 
-                        className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="0"
-                        min="0"
-                        max="100"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                        Esta é a porcentagem padrão para novos investimentos. Você pode ajustar depois.
-                    </p>
+                    <label className="block mb-1 text-slate-300">Porcentagem Inicial (%)</label>
+                    <input type="number" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="0" required />
                 </div>
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors mt-6">
                     Criar Caixinha
                 </button>
             </form>
@@ -2373,71 +2319,65 @@ const JarModal: React.FC<{
 };
 
 interface AnticipateInstallmentModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    expense: Expense | null;
-    onConfirm: (expenseId: string, countToAnticipate: number) => void;
-    displayedDate: Date;
-    isCensored: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+  expense: Expense | null;
+  onConfirm: (expenseId: string, count: number) => void;
+  displayedDate: Date;
+  isCensored: boolean;
 }
 
 const AnticipateInstallmentModal: React.FC<AnticipateInstallmentModalProps> = ({ isOpen, onClose, expense, onConfirm, displayedDate, isCensored }) => {
     const [count, setCount] = useState(1);
-
-    const remainingInstallments = useMemo(() => {
-        if (!expense || !expense.installments) return 0;
-        const CARD_CLOSING_DAY = 15;
-        const firstPaymentDate = new Date(expense.date + 'T00:00:00');
-        if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
-            firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
-        }
-        const monthsDiff = (displayedDate.getFullYear() - firstPaymentDate.getFullYear()) * 12 + (displayedDate.getMonth() - firstPaymentDate.getMonth());
-        const paidInstallments = monthsDiff + 1;
-        
-        return Math.max(0, expense.installments.total - paidInstallments);
-    }, [expense, displayedDate]);
-
-    useEffect(() => {
-      setCount(1);
-    }, [isOpen]);
-
+    
     if (!isOpen || !expense || !expense.installments) return null;
-    
+
     const installmentAmount = expense.amount / expense.installments.total;
-    const totalToAnticipate = count * installmentAmount;
-    
+    const totalValue = count * installmentAmount;
+
+    const handleSubmit = () => {
+        onConfirm(expense.id, count);
+        onClose();
+        setCount(1);
+    };
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Antecipar Parcelas`}>
-            <div className="space-y-4">
-                <p className="font-bold text-slate-200 text-lg">{expense.description}</p>
-                <p>Você pode antecipar até <span className="font-bold">{remainingInstallments}</span> parcelas futuras.</p>
+         <Modal isOpen={isOpen} onClose={onClose} title="Antecipar Parcelas">
+             <div className="space-y-4">
+                <p className="text-slate-300">Quantas parcelas de <span className="font-bold text-white">{expense.description}</span> você deseja antecipar?</p>
                 
-                <div>
-                    <label className="block mb-1 font-semibold text-slate-300">Quantas parcelas deseja antecipar?</label>
+                <div className="flex items-center gap-4">
+                    <label className="text-slate-400">Número de parcelas:</label>
                     <input 
                         type="number" 
+                        min="1" 
+                        max={expense.installments.total} 
                         value={count} 
-                        onChange={(e) => setCount(Math.max(1, Math.min(parseInt(e.target.value) || 1, remainingInstallments)))}
-                        min="1"
-                        max={remainingInstallments}
-                        className="w-full bg-dark-700 p-2 rounded border border-dark-600"
+                        onChange={e => setCount(Math.min(parseInt(e.target.value) || 1, expense.installments!.total))}
+                        className="w-20 bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white text-center"
                     />
                 </div>
                 
-                <div className="bg-dark-700 p-4 rounded-lg text-center">
-                    <p className="text-slate-400">Valor a ser pago agora</p>
-                    <p className="text-2xl font-bold text-accent">{formatCurrency(totalToAnticipate, isCensored)}</p>
+                <div className="bg-dark-700 p-4 rounded-lg">
+                     <div className="flex justify-between items-center mb-2">
+                        <span className="text-slate-400">Valor da Parcela:</span>
+                        <span className="font-semibold">{formatCurrency(installmentAmount, isCensored)}</span>
+                     </div>
+                     <div className="flex justify-between items-center text-lg border-t border-dark-600 pt-2">
+                        <span className="text-slate-200 font-bold">Total a pagar agora:</span>
+                        <span className="font-bold text-accent">{formatCurrency(totalValue, isCensored)}</span>
+                     </div>
                 </div>
-                
-                <div className="flex justify-end gap-4 pt-4">
-                    <button onClick={onClose} className="bg-dark-600 hover:bg-dark-500 text-slate-200 font-bold py-2 px-4 rounded-lg transition-colors">
+
+                <div className="flex gap-4 mt-6">
+                    <button onClick={onClose} className="flex-1 bg-dark-600 hover:bg-dark-500 text-slate-300 font-bold py-2 px-4 rounded-lg transition-colors">
                         Cancelar
                     </button>
-                    <button onClick={() => onConfirm(expense.id, count)} className="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors" disabled={count > remainingInstallments || count <= 0}>
-                        Confirmar Antecipação
+                    <button onClick={handleSubmit} className="flex-1 bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        Confirmar
                     </button>
                 </div>
-            </div>
-        </Modal>
-    )
-}
+             </div>
+         </Modal>
+    );
+};
