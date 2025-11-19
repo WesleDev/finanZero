@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Expense, SavingsJar, Income, Notification } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -630,13 +624,6 @@ export default function App() {
     });
   }, []);
 
-  const dashboardPercentages = useMemo(() => {
-    return jars.reduce((acc, jar) => {
-        acc[jar.id] = jar.percentage;
-        return acc;
-    }, {} as Record<string, number>);
-  }, [jars]);
-
   // --- DATA IMPORT/EXPORT ---
   const handleExport = () => {
     const appData = {
@@ -737,43 +724,30 @@ export default function App() {
                 monthlyExpensesList={displayedMonthExpensesList}
                 isCensored={isCensored}
             />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-                <div>
-                     <IncomeManager 
-                        incomes={displayedMonthIncomes}
-                        onAddIncome={handleStartAddIncome}
-                        onEditIncome={handleStartEditIncome}
-                        onRemoveIncome={removeIncome}
-                        isCensored={isCensored}
-                     />
-                     <div className="mt-8">
-                        <ExpenseManager 
-                          expenses={filteredExpensesList} 
-                          displayedDate={displayedDate}
-                          onAddExpense={handleStartAddExpense} 
-                          onEditExpense={handleStartEditExpense} 
-                          onRemoveExpense={removeExpense}
-                          onAnticipateInstallment={handleStartAnticipateInstallment}
-                          onPreviousMonth={goToPreviousMonth}
-                          onNextMonth={goToNextMonth}
-                          isCensored={isCensored}
-                          categoryFilter={categoryFilter}
-                          setCategoryFilter={setCategoryFilter}
-                          subcategoryFilter={subcategoryFilter}
-                          setSubcategoryFilter={setSubcategoryFilter}
-                          recurringFilter={recurringFilter}
-                          setRecurringFilter={setRecurringFilter}
-                        />
-                     </div>
-                </div>
-                <SavingsManager 
-                    jars={jars} 
-                    percentages={dashboardPercentages}
-                    surplus={surplus} 
-                    onAddJar={() => setJarModalOpen(true)} 
-                    onPercentageChange={updateJarPercentage} 
-                    onRemoveJar={removeJar}
+            <div className="mt-8 space-y-8">
+                 <IncomeManager 
+                    incomes={displayedMonthIncomes}
+                    onAddIncome={handleStartAddIncome}
+                    onEditIncome={handleStartEditIncome}
+                    onRemoveIncome={removeIncome}
                     isCensored={isCensored}
+                 />
+                <ExpenseManager 
+                  expenses={filteredExpensesList} 
+                  displayedDate={displayedDate}
+                  onAddExpense={handleStartAddExpense} 
+                  onEditExpense={handleStartEditExpense} 
+                  onRemoveExpense={removeExpense}
+                  onAnticipateInstallment={handleStartAnticipateInstallment}
+                  onPreviousMonth={goToPreviousMonth}
+                  onNextMonth={goToNextMonth}
+                  isCensored={isCensored}
+                  categoryFilter={categoryFilter}
+                  setCategoryFilter={setCategoryFilter}
+                  subcategoryFilter={subcategoryFilter}
+                  setSubcategoryFilter={setSubcategoryFilter}
+                  recurringFilter={recurringFilter}
+                  setRecurringFilter={setRecurringFilter}
                 />
             </div>
           </div>
