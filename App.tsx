@@ -732,6 +732,7 @@ export default function App() {
                 expenses={displayedMonthExpenses} 
                 surplus={surplus} 
                 isCensored={isCensored}
+                displayedDate={displayedDate}
             />
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                  <IncomeManager 
@@ -1551,71 +1552,126 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
     );
 };
 
-const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; isCensored: boolean }> = ({ income, expenses, surplus, isCensored }) => {
-    if (income <= 0) {
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; isCensored: boolean; displayedDate: Date }> = ({ income, expenses, surplus, isCensored, displayedDate }) => {
+    if (income <= 0 && expenses <= 0) {
         return (
-            <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
+            <div className="bg-dark-800 p-8 rounded-xl shadow-lg mt-8 text-center">
                  <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-4">Visão Geral do Mês</h2>
-                 <p className="text-slate-400">Adicione uma receita para ver o gráfico de distribuição.</p>
+                 <p className="text-slate-400">Adicione receitas e despesas para ver a análise detalhada.</p>
             </div>
         );
     }
-    
-    const expensesPercentage = (expenses / income) * 100;
-    const surplusPercentage = Math.max(0, (surplus / income) * 100);
 
-    const radius = 80;
-    const circumference = 2 * Math.PI * radius;
+    const expensesPercentage = income > 0 ? (expenses / income) * 100 : (expenses > 0 ? 100 : 0);
+    const savingsRate = income > 0 ? (surplus / income) * 100 : 0;
     
-    const surplusRotation = (surplusPercentage / 100) * 360;
+    const today = new Date();
+    const daysInMonth = new Date(displayedDate.getFullYear(), displayedDate.getMonth() + 1, 0).getDate();
+    // Determine the divisor for daily average: if current month, use today's date, else use total days in month
+    let dayDivisor = daysInMonth;
+    if (displayedDate.getMonth() === today.getMonth() && displayedDate.getFullYear() === today.getFullYear()) {
+        dayDivisor = today.getDate();
+    }
+    const dailyAverage = expenses / Math.max(1, dayDivisor);
+
+    let healthStatus = "Neutro";
+    let healthColor = "text-slate-400";
+    
+    if (surplus > 0) {
+        if (savingsRate >= 30) {
+            healthStatus = "Excelente";
+            healthColor = "text-green-400";
+        } else if (savingsRate >= 10) {
+            healthStatus = "Saudável";
+            healthColor = "text-blue-400";
+        } else {
+            healthStatus = "Atenção";
+            healthColor = "text-yellow-400";
+        }
+    } else if (surplus < 0) {
+        healthStatus = "Crítico";
+        healthColor = "text-red-400";
+    }
+
+    const radius = 70;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (Math.min(expensesPercentage, 100) / 100) * circumference;
 
     return (
-        <div className="bg-dark-800 rounded-xl shadow-lg mt-8">
-            <div className="p-6 sm:p-8">
-                <h2 className="text-2xl font-bold text-slate-100 mb-8 text-center">Visão Geral do Mês</h2>
-                <div className="flex justify-center">
-                    {/* Overall Summary Section */}
-                    <div className="bg-dark-900/50 rounded-xl p-6 border border-dark-700 flex flex-col items-center justify-center max-w-lg w-full">
-                        <h3 className="text-lg font-semibold text-slate-300 mb-6">Balanço</h3>
-                        <div className="relative w-48 h-48 sm:w-52 sm:h-52 mb-6">
-                             <svg className="w-full h-full" viewBox="0 0 200 200">
-                                <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
-                                <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income, isCensored)}</text>
-                                
-                                <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-blue-500/10 stroke-current" />
-                                
-                                {surplus > 0 && 
-                                    <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
-                                        strokeDasharray={circumference} 
-                                        strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} 
-                                        strokeLinecap="round" 
-                                        transform="rotate(-90 100 100)" 
-                                        className="text-blue-500 stroke-current" />
-                                }
-
-                                <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
-                                    strokeDasharray={circumference} 
-                                    strokeDashoffset={circumference - (expensesPercentage / 100) * circumference} 
-                                    strokeLinecap="round" 
-                                    transform={`rotate(${(surplus > 0 ? surplusRotation : 0) - 90} 100 100)`}
-                                    className="text-red-500 stroke-current" />
-                            </svg>
+        <div className="bg-dark-800 rounded-xl shadow-lg mt-8 overflow-hidden">
+             <div className="p-4 border-b border-dark-700 bg-dark-900/30">
+                 <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                    <ChartPieIcon className="h-6 w-6 text-accent"/> 
+                    Visão Geral de {displayedDate.toLocaleString('pt-BR', { month: 'long' })}
+                 </h2>
+             </div>
+            
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                {/* Left Column: Visual Chart */}
+                <div className="flex flex-col items-center justify-center relative">
+                    <div className="relative w-48 h-48">
+                         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 160 160">
+                            <circle cx="80" cy="80" r={radius} fill="transparent" strokeWidth="12" className="stroke-dark-700" />
+                            <circle cx="80" cy="80" r={radius} fill="transparent" strokeWidth="12" 
+                                strokeDasharray={circumference} 
+                                strokeDashoffset={strokeDashoffset} 
+                                strokeLinecap="round" 
+                                className={`${expensesPercentage > 100 ? 'stroke-red-500' : 'stroke-blue-500'} transition-all duration-1000`} 
+                            />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Balanço</span>
+                            <span className={`text-2xl font-bold ${surplus >= 0 ? 'text-slate-100' : 'text-red-400'}`}>
+                                {formatCurrency(surplus, isCensored)}
+                            </span>
+                            <span className="text-xs text-slate-500 mt-1">{surplus >= 0 ? 'Disponível' : 'Negativo'}</span>
                         </div>
-                        <div className="flex justify-center gap-6 w-full">
-                            <div className="flex items-center">
-                                <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                                <div>
-                                    <p className="text-slate-400 text-sm">Despesas</p>
-                                    <p className="font-bold text-base text-red-400">{formatCurrency(expenses, isCensored)}</p>
-                                </div>
+                    </div>
+                     <div className="mt-4 text-center">
+                        <p className="text-sm text-slate-400">
+                            Você gastou <strong className="text-slate-200">{expensesPercentage.toFixed(1)}%</strong> da sua receita.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Right Column: Detailed Stats */}
+                <div className="flex flex-col gap-6">
+                    {/* Income vs Expense Bars */}
+                    <div className="space-y-4">
+                        <div>
+                            <div className="flex justify-between text-sm mb-1">
+                                <span className="text-slate-400">Receitas</span>
+                                <span className="font-bold text-green-400">{formatCurrency(income, isCensored)}</span>
                             </div>
-                            <div className="flex items-center">
-                                <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
-                                <div>
-                                    <p className="text-slate-400 text-sm">Sobra</p>
-                                    <p className="font-bold text-base text-blue-400">{formatCurrency(surplus, isCensored)}</p>
-                                </div>
+                            <div className="w-full bg-dark-700 rounded-full h-2.5">
+                                <div className="bg-green-500 h-2.5 rounded-full" style={{ width: '100%' }}></div>
                             </div>
+                        </div>
+                         <div>
+                            <div className="flex justify-between text-sm mb-1">
+                                <span className="text-slate-400">Despesas</span>
+                                <span className="font-bold text-red-400">{formatCurrency(expenses, isCensored)}</span>
+                            </div>
+                            <div className="w-full bg-dark-700 rounded-full h-2.5">
+                                <div 
+                                    className={`${expensesPercentage > 100 ? 'bg-red-500' : 'bg-blue-500'} h-2.5 rounded-full transition-all duration-500`} 
+                                    style={{ width: `${Math.min(expensesPercentage, 100)}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Mini Stat Cards Grid */}
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                        <div className="bg-dark-700/50 p-3 rounded-lg border border-dark-700">
+                            <p className="text-xs text-slate-400 mb-1">Saúde Financeira</p>
+                            <p className={`font-bold text-lg ${healthColor}`}>{healthStatus}</p>
+                            <p className="text-[10px] text-slate-500">{savingsRate > 0 ? `${savingsRate.toFixed(0)}% economizado` : 'Sem poupança'}</p>
+                        </div>
+                         <div className="bg-dark-700/50 p-3 rounded-lg border border-dark-700">
+                            <p className="text-xs text-slate-400 mb-1">Média Diária</p>
+                            <p className="font-bold text-lg text-slate-200">{formatCurrency(dailyAverage, isCensored)}</p>
+                            <p className="text-[10px] text-slate-500">Gastos por dia</p>
                         </div>
                     </div>
                 </div>
