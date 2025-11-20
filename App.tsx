@@ -1636,7 +1636,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
 
     return (
         <div className="w-full">
-            <h3 className="text-lg font-bold text-slate-300 mb-4 text-center lg:text-left">Gastos por Categoria</h3>
+            <h3 className="text-lg font-semibold text-slate-300 mb-6 text-center">Gastos por Categoria</h3>
             {categoryData.length === 0 ? (
                 <p className="text-slate-500 text-center py-8">Nenhum gasto para exibir.</p>
             ) : (
@@ -1682,7 +1682,7 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
                             </div>
                         )}
                     </div>
-                    <ul className="w-full space-y-1 text-sm self-center sm:self-start max-h-48 overflow-y-auto pr-2">
+                    <ul className="w-full space-y-1 text-sm self-center sm:self-start max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                         {categoryData.map(slice => {
                              const isExpanded = expandedCategories.includes(slice.name);
                              const subcategories = expensesBySubcategory[slice.name] || [];
@@ -1747,57 +1747,60 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
     const surplusRotation = (surplusPercentage / 100) * 360;
 
     return (
-        <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-6 text-center">Visão Geral do Mês</h2>
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-center justify-around">
+        <div className="bg-dark-800 rounded-xl shadow-lg mt-8">
+            <div className="p-6 sm:p-8">
+                <h2 className="text-2xl font-bold text-slate-100 mb-8 text-center">Visão Geral do Mês</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-                {/* Overall Summary Section */}
-                <div className="flex flex-col items-center gap-4 flex-shrink-0">
-                    <div className="relative w-48 h-48 sm:w-52 sm:h-52">
-                         <svg className="w-full h-full" viewBox="0 0 200 200">
-                            <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
-                            <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income, isCensored)}</text>
-                            
-                            <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-blue-500/10 stroke-current" />
-                            
-                            {surplus > 0 && 
+                    {/* Overall Summary Section */}
+                    <div className="bg-dark-900/50 rounded-xl p-6 border border-dark-700 flex flex-col items-center justify-center">
+                        <h3 className="text-lg font-semibold text-slate-300 mb-6">Balanço</h3>
+                        <div className="relative w-48 h-48 sm:w-52 sm:h-52 mb-6">
+                             <svg className="w-full h-full" viewBox="0 0 200 200">
+                                <text x="100" y="95" textAnchor="middle" className="fill-current text-slate-400 text-sm">Receita Total</text>
+                                <text x="100" y="120" textAnchor="middle" className="fill-current text-slate-100 text-2xl font-bold">{formatCurrency(income, isCensored)}</text>
+                                
+                                <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" className="text-blue-500/10 stroke-current" />
+                                
+                                {surplus > 0 && 
+                                    <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
+                                        strokeDasharray={circumference} 
+                                        strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} 
+                                        strokeLinecap="round" 
+                                        transform="rotate(-90 100 100)" 
+                                        className="text-blue-500 stroke-current" />
+                                }
+
                                 <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
                                     strokeDasharray={circumference} 
-                                    strokeDashoffset={circumference - (surplusPercentage / 100) * circumference} 
+                                    strokeDashoffset={circumference - (expensesPercentage / 100) * circumference} 
                                     strokeLinecap="round" 
-                                    transform="rotate(-90 100 100)" 
-                                    className="text-blue-500 stroke-current" />
-                            }
-
-                            <circle cx="100" cy="100" r={radius} fill="transparent" strokeWidth="20" 
-                                strokeDasharray={circumference} 
-                                strokeDashoffset={circumference - (expensesPercentage / 100) * circumference} 
-                                strokeLinecap="round" 
-                                transform={`rotate(${(surplus > 0 ? surplusRotation : 0) - 90} 100 100)`}
-                                className="text-red-500 stroke-current" />
-                        </svg>
-                    </div>
-                    <div className="flex justify-center gap-6">
-                        <div className="flex items-center">
-                            <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                            <div>
-                                <p className="text-slate-400 text-sm">Despesas</p>
-                                <p className="font-bold text-base text-red-400">{formatCurrency(expenses, isCensored)}</p>
-                            </div>
+                                    transform={`rotate(${(surplus > 0 ? surplusRotation : 0) - 90} 100 100)`}
+                                    className="text-red-500 stroke-current" />
+                            </svg>
                         </div>
-                        <div className="flex items-center">
-                            <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
-                            <div>
-                                <p className="text-slate-400 text-sm">Sobra</p>
-                                <p className="font-bold text-base text-blue-400">{formatCurrency(surplus, isCensored)}</p>
+                        <div className="flex justify-center gap-6 w-full">
+                            <div className="flex items-center">
+                                <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                                <div>
+                                    <p className="text-slate-400 text-sm">Despesas</p>
+                                    <p className="font-bold text-base text-red-400">{formatCurrency(expenses, isCensored)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center">
+                                <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+                                <div>
+                                    <p className="text-slate-400 text-sm">Sobra</p>
+                                    <p className="font-bold text-base text-blue-400">{formatCurrency(surplus, isCensored)}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Expenses Breakdown Section */}
-                <div className="w-full lg:w-1/2">
-                     <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
+                    {/* Expenses Breakdown Section */}
+                    <div className="bg-dark-900/50 rounded-xl p-6 border border-dark-700 flex flex-col justify-center">
+                         <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
+                    </div>
                 </div>
             </div>
         </div>
