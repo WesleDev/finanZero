@@ -22,6 +22,7 @@ export interface Income {
   description: string;
   amount: number;
   date: string;
+  isRecurring?: boolean;
 }
 
 export interface Notification {

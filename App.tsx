@@ -23,7 +23,7 @@ const MinusCircleIcon: React.FC = () => (
 );
 const RecurringIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <title>Gasto Recorrente</title>
+        <title>Recorrente</title>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 15M20 20l-1.5-1.5A9 9 0 003.5 9" />
     </svg>
 );
@@ -323,14 +323,24 @@ export default function App() {
   const totalIncome = useMemo(() => {
     const targetMonthYear = getMonthYear(displayedDate);
     return incomes
-        .filter(inc => getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear)
+        .filter(inc => {
+            if (inc.isRecurring) {
+                return getMonthYear(new Date(inc.date + 'T00:00:00')) <= targetMonthYear;
+            }
+            return getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear;
+        })
         .reduce((acc, inc) => acc + inc.amount, 0);
   }, [incomes, displayedDate]);
 
   const displayedMonthIncomes = useMemo(() => {
     const targetMonthYear = getMonthYear(displayedDate);
     return incomes
-      .filter(inc => getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear)
+      .filter(inc => {
+          if (inc.isRecurring) {
+                return getMonthYear(new Date(inc.date + 'T00:00:00')) <= targetMonthYear;
+            }
+            return getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear;
+      })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [incomes, displayedDate]);
 
@@ -1092,7 +1102,12 @@ const FinancialEvolutionPage: React.FC<FinancialEvolutionPageProps> = ({ incomes
             const targetMonthYear = getMonthYear(date);
             
             const monthlyIncome = incomes
-                .filter(inc => getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear)
+                .filter(inc => {
+                     if (inc.isRecurring) {
+                         return getMonthYear(new Date(inc.date + 'T00:00:00')) <= targetMonthYear;
+                     }
+                     return getMonthYear(new Date(inc.date + 'T00:00:00')) === targetMonthYear;
+                })
                 .reduce((acc, inc) => acc + inc.amount, 0);
 
             const monthlyExpenses = calculateMonthlyExpensesForDate(expenses, date);
@@ -1578,12 +1593,12 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
     const categoryData = useMemo(() => {
         if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
         
-        const expensesByCategory = expenses.reduce((acc: Record<string, number>, expense) => {
+        const expensesByCategory = expenses.reduce((acc, expense) => {
             const category = expense.category || 'Outros';
             const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
             acc[category] = (acc[category] || 0) + amount;
             return acc;
-        }, {});
+        }, {} as Record<string, number>);
         
         return Object.entries(expensesByCategory)
             .map(([name, value], index) => ({ name, value, color: COLORS[index % COLORS.length] }))
@@ -1595,12 +1610,12 @@ const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: numbe
         categoryData.forEach(cat => {
           const subcategories = expenses
             .filter(e => e.category === cat.name)
-            .reduce((acc: Record<string, number>, expense) => {
+            .reduce((acc, expense) => {
               const subcatName = expense.subcategory || 'Outros';
               const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
               acc[subcatName] = (acc[subcatName] || 0) + amount;
               return acc;
-            }, {});
+            }, {} as Record<string, number>);
             
           result[cat.name] = Object.entries(subcategories)
             .map(([name, value]) => ({ name, value }))
@@ -1780,424 +1795,371 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
                     </div>
                 </div>
 
-                <div className="w-full h-px lg:w-px lg:h-auto bg-dark-700 self-stretch"></div>
-
-                <div className="w-full lg:max-w-md">
-                    <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
+                {/* Expenses Breakdown Section */}
+                <div className="w-full lg:w-1/2">
+                     <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
                 </div>
             </div>
         </div>
     );
 };
 
-interface IncomeManagerProps {
-  incomes: Income[];
-  onAddIncome: () => void;
-  onEditIncome: (income: Income) => void;
-  onRemoveIncome: (id: string) => void;
-  isCensored: boolean;
-}
-
-const IncomeManager: React.FC<IncomeManagerProps> = ({ incomes, onAddIncome, onEditIncome, onRemoveIncome, isCensored }) => {
-  return (
-    <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-slate-100">Receitas</h2>
-            <button onClick={onAddIncome} className="flex items-center bg-primary hover:bg-secondary text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
-                <PlusIcon className="h-5 w-5" />
-                <span className="hidden sm:inline ml-2">Adicionar</span>
-            </button>
-        </div>
-        <div className="flex-grow overflow-y-auto max-h-48 pr-2">
-            {incomes.length === 0 ? (
-                <p className="text-slate-400 text-center py-10">Nenhuma receita cadastrada para este mês.</p>
-            ) : (
-                <ul className="space-y-3">
-                    {incomes.map(inc => (
-                        <li key={inc.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                            <div className="flex-grow">
-                                <p className="font-semibold">{inc.description}</p>
-                                <p className="text-xs text-slate-400">{new Date(inc.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-                            </div>
-                            <div className="flex items-center self-end sm:self-center">
-                                <p className="font-bold text-green-400 mr-4">{formatCurrency(inc.amount, isCensored)}</p>
-                                <button onClick={() => onEditIncome(inc)} className="text-slate-500 hover:text-accent p-1">
-                                    <EditIcon />
-                                </button>
-                                <button onClick={() => onRemoveIncome(inc.id)} className="text-slate-500 hover:text-danger p-1">
-                                    <TrashIcon />
-                                </button>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    </div>
-  );
-};
-
-interface ExpenseFilterProps {
-  categoryFilter: string;
-  setCategoryFilter: (value: string) => void;
-  subcategoryFilter: string;
-  setSubcategoryFilter: (value: string) => void;
-  recurringFilter: string;
-  setRecurringFilter: (value: string) => void;
-}
-
-const ExpenseFilter: React.FC<ExpenseFilterProps> = ({
-  categoryFilter, setCategoryFilter,
-  subcategoryFilter, setSubcategoryFilter,
-  recurringFilter, setRecurringFilter,
-}) => {
-  const availableSubcategories = SUBCATEGORIES[categoryFilter as keyof typeof SUBCATEGORIES] || [];
-
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCategoryFilter(e.target.value);
-    setSubcategoryFilter('all');
-  };
-
-  const handleClearFilters = () => {
-    setCategoryFilter('all');
-    setSubcategoryFilter('all');
-    setRecurringFilter('all');
-  };
-
-  return (
-    <div className="bg-dark-700/50 p-4 rounded-lg mb-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-        <div>
-          <label className="block mb-1 text-sm font-semibold text-slate-300">Categoria</label>
-          <select value={categoryFilter} onChange={handleCategoryChange} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm">
-            <option value="all">Todas</option>
-            {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block mb-1 text-sm font-semibold text-slate-300">Subcategoria</label>
-          <select value={subcategoryFilter} onChange={e => setSubcategoryFilter(e.target.value)} disabled={categoryFilter === 'all'} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm disabled:opacity-50">
-            <option value="all">Todas</option>
-            {availableSubcategories.map(sub => <option key={sub} value={sub}>{sub}</option>)}
-          </select>
-        </div>
-        <div>
-            <label className="block mb-1 text-sm font-semibold text-slate-300">Tipo</label>
-             <select value={recurringFilter} onChange={e => setRecurringFilter(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-sm">
-                <option value="all">Todos</option>
-                <option value="yes">Recorrente</option>
-                <option value="no">Pontual / Parcelado</option>
-            </select>
-        </div>
-        <div>
-            <button onClick={handleClearFilters} className="w-full bg-dark-600 hover:bg-dark-500 text-slate-300 font-bold py-2 px-3 rounded transition-colors text-sm">
-                Limpar Filtros
-            </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface ExpenseManagerProps {
-  expenses: Expense[];
-  displayedDate: Date;
-  onAddExpense: () => void;
-  onEditExpense: (expense: Expense) => void;
-  onRemoveExpense: (id: string) => void;
-  onAnticipateInstallment: (id: string) => void;
-  onPreviousMonth: () => void;
-  onNextMonth: () => void;
-  isCensored: boolean;
-  categoryFilter: string;
-  setCategoryFilter: (val: string) => void;
-  subcategoryFilter: string;
-  setSubcategoryFilter: (val: string) => void;
-  recurringFilter: string;
-  setRecurringFilter: (val: string) => void;
-}
-
-const ExpenseManager: React.FC<ExpenseManagerProps> = ({
-    expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onAnticipateInstallment,
-    onPreviousMonth, onNextMonth, isCensored,
-    categoryFilter, setCategoryFilter,
-    subcategoryFilter, setSubcategoryFilter,
-    recurringFilter, setRecurringFilter,
-}) => {
+const IncomeManager: React.FC<{
+    incomes: Income[];
+    onAddIncome: () => void;
+    onEditIncome: (income: Income) => void;
+    onRemoveIncome: (id: string) => void;
+    isCensored: boolean;
+}> = ({ incomes, onAddIncome, onEditIncome, onRemoveIncome, isCensored }) => {
     return (
-        <div className="bg-dark-800 p-6 rounded-xl shadow-lg flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-2 sm:gap-4">
-                    <button onClick={onPreviousMonth} className="p-1 rounded hover:bg-dark-700 text-slate-400 hover:text-white">
-                         <ChevronLeftIcon />
-                    </button>
-                    <h2 className="text-xl sm:text-2xl font-bold text-slate-100 capitalize">
-                        {displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
-                    </h2>
-                    <button onClick={onNextMonth} className="p-1 rounded hover:bg-dark-700 text-slate-400 hover:text-white">
-                        <ChevronRightIcon />
-                    </button>
-                </div>
-                <button onClick={onAddExpense} className="flex items-center bg-danger hover:bg-red-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors">
-                    <PlusIcon className="h-5 w-5" />
-                    <span className="hidden sm:inline ml-2">Adicionar</span>
+        <div className="bg-dark-800 p-6 rounded-xl shadow-lg h-full">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-100">Receitas</h2>
+                <button onClick={onAddIncome} className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-full shadow-lg transition-transform transform hover:scale-105">
+                    <PlusIcon />
                 </button>
             </div>
-
-            <ExpenseFilter 
-                categoryFilter={categoryFilter}
-                setCategoryFilter={setCategoryFilter}
-                subcategoryFilter={subcategoryFilter}
-                setSubcategoryFilter={setSubcategoryFilter}
-                recurringFilter={recurringFilter}
-                setRecurringFilter={setRecurringFilter}
-            />
-
-             <div className="flex-grow overflow-y-auto max-h-96 pr-2">
-                {expenses.length === 0 ? (
-                    <p className="text-slate-400 text-center py-10">Nenhum gasto encontrado para este mês.</p>
+            <div className="space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
+                {incomes.length === 0 ? (
+                    <p className="text-slate-500 text-center py-8">Nenhuma receita registrada neste mês.</p>
                 ) : (
-                    <ul className="space-y-3">
-                        {expenses.map(expense => {
-                             const isInstallment = !!expense.installments;
-                             const amount = isInstallment ? (expense.amount / expense.installments!.total) : expense.amount;
-
-                             return (
-                                <li key={expense.id} className="bg-dark-700 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-l-4 border-l-transparent hover:border-l-accent transition-all">
-                                    <div className="flex-grow">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-semibold">{expense.description}</span>
-                                            {expense.isRecurring && <RecurringIcon />}
-                                            {isInstallment && <span className="text-xs bg-dark-600 px-1 rounded text-slate-400">Parcelado</span>}
-                                            {expense.category === 'Cartão de Crédito' && <CreditCardIcon className="h-4 w-4 text-amber-400" />}
-                                        </div>
-                                        <div className="text-xs text-slate-400 flex gap-2 mt-1">
-                                            <span className="bg-dark-600 px-2 py-0.5 rounded">{expense.category}</span>
-                                            {expense.subcategory && <span className="bg-dark-600 px-2 py-0.5 rounded">{expense.subcategory}</span>}
-                                            <span>{new Date(expense.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center self-end sm:self-center gap-4">
-                                        <div className="text-right">
-                                            <p className="font-bold text-red-400">{formatCurrency(amount, isCensored)}</p>
-                                            {isInstallment && (
-                                                <p className="text-xs text-slate-500">Total: {formatCurrency(expense.amount, isCensored)} ({expense.installments?.total}x)</p>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center">
-                                            {isInstallment && (
-                                                 <button onClick={() => onAnticipateInstallment(expense.id)} title="Antecipar Parcelas" className="text-slate-500 hover:text-blue-400 p-1 mr-1">
-                                                    <FastForwardIcon />
-                                                </button>
-                                            )}
-                                            <button onClick={() => onEditExpense(expense)} className="text-slate-500 hover:text-accent p-1">
-                                                <EditIcon />
-                                            </button>
-                                            <button onClick={() => onRemoveExpense(expense.id)} className="text-slate-500 hover:text-danger p-1">
-                                                <TrashIcon />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </li>
-                             );
-                        })}
-                    </ul>
+                    incomes.map(income => (
+                        <div key={income.id} className="bg-dark-700 p-4 rounded-lg flex justify-between items-center group hover:bg-dark-600 transition-colors border-l-4 border-green-500">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-slate-200">{income.description}</h3>
+                                    {income.isRecurring && <div title="Receita Recorrente"><RecurringIcon /></div>}
+                                </div>
+                                <p className="text-xs text-slate-400">{new Date(income.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="font-bold text-green-400 text-lg">{formatCurrency(income.amount, isCensored)}</span>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => onEditIncome(income)} className="text-slate-400 hover:text-blue-400 p-1 rounded">
+                                        <EditIcon />
+                                    </button>
+                                    <button onClick={() => onRemoveIncome(income.id)} className="text-slate-400 hover:text-red-400 p-1 rounded">
+                                        <TrashIcon />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))
                 )}
             </div>
         </div>
     );
 };
 
-interface SavingsManagerProps {
-    jars: SavingsJar[];
+const ExpenseManager: React.FC<{
+    expenses: Expense[];
+    displayedDate: Date;
+    onAddExpense: () => void;
+    onEditExpense: (expense: Expense) => void;
+    onRemoveExpense: (id: string) => void;
+    onAnticipateInstallment: (id: string) => void;
+    onPreviousMonth: () => void;
+    onNextMonth: () => void;
+    isCensored: boolean;
+    categoryFilter: string;
+    setCategoryFilter: (val: string) => void;
+    subcategoryFilter: string;
+    setSubcategoryFilter: (val: string) => void;
+    recurringFilter: string;
+    setRecurringFilter: (val: string) => void;
+}> = ({ 
+    expenses, displayedDate, onAddExpense, onEditExpense, onRemoveExpense, onAnticipateInstallment,
+    onPreviousMonth, onNextMonth, isCensored,
+    categoryFilter, setCategoryFilter, subcategoryFilter, setSubcategoryFilter, recurringFilter, setRecurringFilter
+}) => {
+    
+    const totalDisplayed = expenses.reduce((acc, curr) => {
+         const val = curr.installments ? curr.amount / curr.installments.total : curr.amount;
+         return acc + val;
+    }, 0);
+
+    return (
+        <div className="bg-dark-800 p-6 rounded-xl shadow-lg h-full flex flex-col">
+             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <div className="flex items-center gap-4">
+                    <button onClick={onPreviousMonth} className="p-2 hover:bg-dark-700 rounded-full text-slate-400 hover:text-white transition-colors">
+                        <ChevronLeftIcon />
+                    </button>
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-100 capitalize w-40 text-center">
+                        {displayedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                    </h2>
+                    <button onClick={onNextMonth} className="p-2 hover:bg-dark-700 rounded-full text-slate-400 hover:text-white transition-colors">
+                        <ChevronRightIcon />
+                    </button>
+                </div>
+                <button onClick={onAddExpense} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-full shadow-lg transition-transform transform hover:scale-105">
+                    <PlusIcon />
+                </button>
+            </div>
+            
+            {/* Filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <select 
+                    value={categoryFilter} 
+                    onChange={(e) => { setCategoryFilter(e.target.value); setSubcategoryFilter('all'); }}
+                    className="bg-dark-700 text-slate-300 text-sm rounded p-2 border border-dark-600 focus:outline-none focus:border-accent"
+                >
+                    <option value="all">Todas Categorias</option>
+                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                 <select 
+                    value={subcategoryFilter} 
+                    onChange={(e) => setSubcategoryFilter(e.target.value)}
+                    disabled={categoryFilter === 'all'}
+                    className="bg-dark-700 text-slate-300 text-sm rounded p-2 border border-dark-600 focus:outline-none focus:border-accent disabled:opacity-50"
+                >
+                    <option value="all">Todas Subcategorias</option>
+                     {categoryFilter !== 'all' && SUBCATEGORIES[categoryFilter]?.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select 
+                    value={recurringFilter} 
+                    onChange={(e) => setRecurringFilter(e.target.value)}
+                    className="bg-dark-700 text-slate-300 text-sm rounded p-2 border border-dark-600 focus:outline-none focus:border-accent"
+                >
+                    <option value="all">Todos Tipos</option>
+                    <option value="yes">Recorrentes</option>
+                    <option value="no">Não Recorrentes</option>
+                </select>
+            </div>
+            
+            <div className="space-y-3 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar flex-grow">
+                {expenses.length === 0 ? (
+                    <p className="text-slate-500 text-center py-8">Nenhuma despesa encontrada.</p>
+                ) : (
+                    expenses.map(expense => {
+                        const isInstallment = !!expense.installments;
+                        const displayAmount = isInstallment ? (expense.amount / expense.installments!.total) : expense.amount;
+                        
+                        let installmentLabel = "";
+                        if (isInstallment) {
+                             installmentLabel = `${expense.installments!.total}x`;
+                        }
+
+                        return (
+                        <div key={expense.id} className="bg-dark-700 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-dark-600 transition-colors border-l-4 border-red-500">
+                            <div className="flex-grow">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="font-bold text-slate-200">{expense.description}</h3>
+                                    {expense.isRecurring && <div title="Despesa Recorrente"><RecurringIcon /></div>}
+                                    {isInstallment && <span className="text-xs bg-dark-900 text-slate-400 px-2 py-0.5 rounded-full border border-dark-600">{installmentLabel}</span>}
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-xs text-slate-400">
+                                    <span className="bg-dark-800 px-2 py-1 rounded">{expense.category}</span>
+                                    {expense.subcategory && <span className="bg-dark-800 px-2 py-1 rounded">{expense.subcategory}</span>}
+                                    <span>{new Date(expense.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+                                <span className="font-bold text-red-400 text-lg whitespace-nowrap">{formatCurrency(displayAmount, isCensored)}</span>
+                                <div className="flex gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {isInstallment && (
+                                         <button onClick={() => onAnticipateInstallment(expense.id)} title="Antecipar Parcelas" className="text-slate-400 hover:text-yellow-400 p-1 rounded">
+                                            <FastForwardIcon />
+                                        </button>
+                                    )}
+                                    <button onClick={() => onEditExpense(expense)} className="text-slate-400 hover:text-blue-400 p-1 rounded">
+                                        <EditIcon />
+                                    </button>
+                                    <button onClick={() => onRemoveExpense(expense.id)} className="text-slate-400 hover:text-red-400 p-1 rounded">
+                                        <TrashIcon />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )})
+                )}
+            </div>
+            
+             {expenses.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-dark-700 flex justify-between items-center text-slate-300">
+                    <span className="font-semibold">Total Visível:</span>
+                    <span className="font-bold text-red-400 text-xl">{formatCurrency(totalDisplayed, isCensored)}</span>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const SavingsManager: React.FC<{
+    jars: Omit<SavingsJar, 'percentage'>[];
     percentages: Record<string, number>;
     surplus: number;
     onAddJar: () => void;
-    onPercentageChange: (id: string, percentage: number) => void;
+    onPercentageChange: (id: string, val: number) => void;
     onRemoveJar: (id: string) => void;
     isCensored: boolean;
-}
-
-const SavingsManager: React.FC<SavingsManagerProps> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar, isCensored }) => {
+}> = ({ jars, percentages, surplus, onAddJar, onPercentageChange, onRemoveJar, isCensored }) => {
     const totalPercentage = jars.reduce((acc, jar) => acc + (percentages[jar.id] || 0), 0);
 
     return (
         <div className="space-y-4">
             {jars.map(jar => {
                 const percentage = percentages[jar.id] || 0;
-                const amount = (surplus > 0 ? surplus : 0) * (percentage / 100);
+                const amount = Math.max(0, surplus * (percentage / 100));
+                
                 return (
-                    <div key={jar.id} className="bg-dark-700 p-3 rounded-lg flex justify-between items-center">
-                         <div>
-                            <p className="font-semibold">{jar.name}</p>
-                             <p className="text-sm text-slate-400">{formatCurrency(amount, isCensored)}</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                             <div className="relative w-20">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={percentage}
-                                    onChange={(e) => onPercentageChange(jar.id, Number(e.target.value))}
-                                    className="w-full bg-dark-600 p-1 rounded text-right pr-6 focus:outline-none focus:ring-1 focus:ring-accent"
-                                />
-                                <span className="absolute right-2 top-1 text-slate-400">%</span>
+                    <div key={jar.id} className="bg-dark-700 p-4 rounded-lg">
+                        <div className="flex justify-between items-center mb-2">
+                             <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-200">{jar.name}</span>
+                                <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-red-400"><XIcon className="h-4 w-4"/></button>
                              </div>
-                             <button onClick={() => onRemoveJar(jar.id)} className="text-slate-500 hover:text-danger p-1">
-                                <TrashIcon />
-                            </button>
+                             <span className="font-bold text-accent">{formatCurrency(amount, isCensored)}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <input 
+                                type="range" 
+                                min="0" 
+                                max="100" 
+                                value={percentage} 
+                                onChange={(e) => onPercentageChange(jar.id, Number(e.target.value))}
+                                className="w-full h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                            />
+                            <span className="text-sm w-12 text-right font-mono">{percentage}%</span>
                         </div>
                     </div>
                 );
             })}
             
-            <button onClick={onAddJar} className="w-full border-2 border-dashed border-dark-600 rounded-lg p-3 flex justify-center items-center text-slate-400 hover:text-white hover:border-slate-400 transition-colors">
-                 <PlusIcon className="h-5 w-5 mr-2" />
-                 Nova Caixinha
-            </button>
-
-             <div className="flex justify-between items-center text-sm mt-2 px-1">
-                <span className={totalPercentage > 100 ? "text-red-400 font-bold" : "text-slate-400"}>
-                    Total Distribuído: {totalPercentage}%
-                </span>
-                 {totalPercentage > 100 && <span className="text-red-400 text-xs">Total excede 100%</span>}
+            <div className="flex justify-between items-center px-2 text-sm font-semibold">
+                 <span className={totalPercentage > 100 ? 'text-red-400' : 'text-slate-400'}>
+                    Total Alocado: {totalPercentage}%
+                 </span>
+                 {totalPercentage > 100 && <span className="text-red-400 text-xs">Atenção: Total excede 100%</span>}
             </div>
+
+            <button 
+                onClick={onAddJar}
+                className="w-full py-3 border-2 border-dashed border-dark-600 text-slate-400 rounded-lg hover:border-accent hover:text-accent transition-colors flex justify-center items-center gap-2"
+            >
+                <PlusIcon className="h-5 w-5" /> Criar Nova Caixinha
+            </button>
         </div>
     );
 };
 
-interface IncomeModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAddIncome: (income: Omit<Income, 'id'>) => void;
-  onUpdateIncome: (income: Income) => void;
-  incomeToEdit: Income | null;
-}
+const IncomeModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onAddIncome: (income: Omit<Income, 'id'>) => void;
+    onUpdateIncome: (income: Income) => void;
+    incomeToEdit: Income | null;
+}> = ({ isOpen, onClose, onAddIncome, onUpdateIncome, incomeToEdit }) => {
+    const [description, setDescription] = useState('');
+    const [amount, setAmount] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [isRecurring, setIsRecurring] = useState(false);
 
-const IncomeModal: React.FC<IncomeModalProps> = ({ isOpen, onClose, onAddIncome, onUpdateIncome, incomeToEdit }) => {
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-
-  useEffect(() => {
-    if (isOpen) {
+    useEffect(() => {
         if (incomeToEdit) {
             setDescription(incomeToEdit.description);
             setAmount(incomeToEdit.amount.toString().replace('.', ','));
             setDate(incomeToEdit.date);
+            setIsRecurring(!!incomeToEdit.isRecurring);
         } else {
             setDescription('');
             setAmount('');
             setDate(new Date().toISOString().split('T')[0]);
+            setIsRecurring(false);
         }
-    }
-  }, [isOpen, incomeToEdit]);
+    }, [incomeToEdit, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const numericAmount = parseCurrencyInput(amount);
-    if (!description || numericAmount <= 0) return;
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const numericAmount = parseCurrencyInput(amount);
+        if (!description || numericAmount <= 0) return;
 
-    const incomeData = { description, amount: numericAmount, date };
-    
-    if (incomeToEdit) {
-        onUpdateIncome({ ...incomeData, id: incomeToEdit.id });
-    } else {
-        onAddIncome(incomeData);
-    }
-  };
+        const incomeData = {
+            description,
+            amount: numericAmount,
+            date,
+            isRecurring
+        };
 
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title={incomeToEdit ? "Editar Receita" : "Nova Receita"}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block mb-1 text-slate-300">Descrição</label>
-          <input
-            type="text"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white"
-            required
-          />
-        </div>
-        <div>
-          <label className="block mb-1 text-slate-300">Valor</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white"
-            placeholder="R$ 0,00"
-            required
-          />
-        </div>
-        <div>
-          <label className="block mb-1 text-slate-300">Data</label>
-           <div className="relative">
-            <input
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white appearance-none"
-                required
-            />
-             <CalendarIcon className="absolute right-3 top-2.5 h-5 w-5 text-slate-400 pointer-events-none"/>
-           </div>
-        </div>
-        <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors mt-6">
-          Salvar
-        </button>
-      </form>
-    </Modal>
-  );
+        if (incomeToEdit) {
+            onUpdateIncome({ ...incomeData, id: incomeToEdit.id });
+        } else {
+            onAddIncome(incomeData);
+        }
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={incomeToEdit ? "Editar Receita" : "Nova Receita"}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Descrição</label>
+                    <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" placeholder="Ex: Salário, Freelance..." required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Valor</label>
+                    <input type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" placeholder="R$ 0,00" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Data</label>
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" required />
+                </div>
+                <div className="flex items-center gap-2">
+                    <input type="checkbox" id="recurringIncome" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                    <label htmlFor="recurringIncome" className="text-sm font-medium text-slate-300">Receita Recorrente (Mensal)</label>
+                </div>
+                <button type="submit" className="w-full bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-4">
+                    {incomeToEdit ? 'Salvar Alterações' : 'Adicionar Receita'}
+                </button>
+            </form>
+        </Modal>
+    );
 };
 
-interface ExpenseModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAddExpense: (expense: Omit<Expense, 'id'>) => void;
-  onUpdateExpense: (expense: Expense) => void;
-  expenseToEdit: Expense | null;
-}
-
-const ExpenseModal: React.FC<ExpenseModalProps> = ({ isOpen, onClose, onAddExpense, onUpdateExpense, expenseToEdit }) => {
+const ExpenseModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onAddExpense: (expense: Omit<Expense, 'id'>) => void;
+    onUpdateExpense: (expense: Expense) => void;
+    expenseToEdit: Expense | null;
+}> = ({ isOpen, onClose, onAddExpense, onUpdateExpense, expenseToEdit }) => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
-    const [subcategory, setSubcategory] = useState('');
+    const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+    const [subcategory, setSubcategory] = useState<string>('');
     const [isRecurring, setIsRecurring] = useState(false);
-    const [installments, setInstallments] = useState('');
-    
-    useEffect(() => {
-        if (isOpen) {
-            if (expenseToEdit) {
-                setDescription(expenseToEdit.description);
-                setAmount(expenseToEdit.amount.toString().replace('.', ','));
-                setDate(expenseToEdit.date);
-                setCategory(expenseToEdit.category);
-                setSubcategory(expenseToEdit.subcategory || '');
-                setIsRecurring(expenseToEdit.isRecurring);
-                setInstallments(expenseToEdit.installments ? expenseToEdit.installments.total.toString() : '');
-            } else {
-                setDescription('');
-                setAmount('');
-                setDate(new Date().toISOString().split('T')[0]);
-                setCategory(EXPENSE_CATEGORIES[0]);
-                setSubcategory('');
-                setIsRecurring(false);
-                setInstallments('');
-            }
-        }
-    }, [isOpen, expenseToEdit]);
+    const [isInstallment, setIsInstallment] = useState(false);
+    const [installments, setInstallments] = useState(2);
 
     useEffect(() => {
-        if (category && SUBCATEGORIES[category] && !SUBCATEGORIES[category].includes(subcategory)) {
-             setSubcategory(SUBCATEGORIES[category][0] || '');
+        if (expenseToEdit) {
+            setDescription(expenseToEdit.description);
+            // If it's an installment expense, show the TOTAL amount for editing? Or the installment amount?
+            // Typically edit the total amount.
+            setAmount(expenseToEdit.amount.toString().replace('.', ','));
+            setDate(expenseToEdit.date);
+            setCategory(expenseToEdit.category);
+            setSubcategory(expenseToEdit.subcategory || '');
+            setIsRecurring(!!expenseToEdit.isRecurring);
+            if (expenseToEdit.installments) {
+                setIsInstallment(true);
+                setInstallments(expenseToEdit.installments.total);
+            } else {
+                setIsInstallment(false);
+                setInstallments(2);
+            }
+        } else {
+            setDescription('');
+            setAmount('');
+            setDate(new Date().toISOString().split('T')[0]);
+            setCategory(EXPENSE_CATEGORIES[0]);
+            setSubcategory('');
+            setIsRecurring(false);
+            setIsInstallment(false);
+            setInstallments(2);
         }
-    }, [category]);
+    }, [expenseToEdit, isOpen]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -2209,13 +2171,12 @@ const ExpenseModal: React.FC<ExpenseModalProps> = ({ isOpen, onClose, onAddExpen
             amount: numericAmount,
             date,
             category,
-            subcategory: subcategory || undefined,
-            isRecurring
+            subcategory,
+            isRecurring: isRecurring && !isInstallment, // Recurring and installments are mutually exclusive in this logic usually
         };
-        
-        if (installments && parseInt(installments) > 1) {
-             expenseData.installments = { total: parseInt(installments) };
-             expenseData.isRecurring = false; // Cannot be both
+
+        if (isInstallment && !isRecurring) {
+            expenseData.installments = { total: installments };
         }
 
         if (expenseToEdit) {
@@ -2223,94 +2184,96 @@ const ExpenseModal: React.FC<ExpenseModalProps> = ({ isOpen, onClose, onAddExpen
         } else {
             onAddExpense(expenseData);
         }
+        onClose();
     };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={expenseToEdit ? "Editar Despesa" : "Nova Despesa"}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block mb-1 text-slate-300">Descrição</label>
-                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" required />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Descrição</label>
+                    <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" placeholder="Ex: Supermercado" required />
                 </div>
                 <div>
-                    <label className="block mb-1 text-slate-300">Valor Total</label>
-                    <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="R$ 0,00" required />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Valor Total</label>
+                    <input type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" placeholder="R$ 0,00" required />
                 </div>
-                 <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                     <div>
-                         <label className="block mb-1 text-slate-300">Data</label>
-                        <div className="relative">
-                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white appearance-none" required />
-                             <CalendarIcon className="absolute right-3 top-2.5 h-5 w-5 text-slate-400 pointer-events-none"/>
-                        </div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Data</label>
+                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" required />
                     </div>
                     <div>
-                        <label className="block mb-1 text-slate-300">Categoria</label>
-                        <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white">
-                            {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
+                         <label className="block text-sm font-medium text-slate-400 mb-1">Categoria</label>
+                         <select value={category} onChange={(e) => { setCategory(e.target.value); setSubcategory(''); }} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none">
+                            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
                     </div>
                 </div>
-                <div>
-                     <label className="block mb-1 text-slate-300">Subcategoria</label>
-                     <select value={subcategory} onChange={e => setSubcategory(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white">
-                        {SUBCATEGORIES[category]?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                 <div>
+                     <label className="block text-sm font-medium text-slate-400 mb-1">Subcategoria (Opcional)</label>
+                     <select value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none">
+                        <option value="">Selecione...</option>
+                        {SUBCATEGORIES[category]?.map(s => <option key={s} value={s}>{s}</option>)}
                      </select>
                 </div>
-                
-                <div className="flex gap-4 items-center pt-2">
-                     <label className="flex items-center cursor-pointer">
-                        <input type="checkbox" checked={isRecurring} onChange={e => { setIsRecurring(e.target.checked); if(e.target.checked) setInstallments(''); }} className="form-checkbox h-5 w-5 text-accent rounded border-dark-600 bg-dark-700 focus:ring-accent" />
-                        <span className="ml-2 text-slate-300">Gasto Recorrente (Mensal)</span>
-                    </label>
-                </div>
-                 {!isRecurring && (
-                    <div>
-                         <label className="block mb-1 text-slate-300">Parcelas (Opcional)</label>
-                         <input type="number" min="1" value={installments} onChange={e => setInstallments(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="Ex: 12" />
-                         <p className="text-xs text-slate-500 mt-1">Deixe em branco para pagamento único.</p>
-                    </div>
-                 )}
 
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors mt-6">
-                    Salvar
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                        <input type="checkbox" id="recurring" checked={isRecurring} onChange={(e) => { setIsRecurring(e.target.checked); if(e.target.checked) setIsInstallment(false); }} className="w-4 h-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                        <label htmlFor="recurring" className="text-sm font-medium text-slate-300">Despesa Recorrente (Mensal)</label>
+                    </div>
+                     <div className="flex items-center gap-2">
+                        <input type="checkbox" id="installment" checked={isInstallment} onChange={(e) => { setIsInstallment(e.target.checked); if(e.target.checked) setIsRecurring(false); }} className="w-4 h-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                        <label htmlFor="installment" className="text-sm font-medium text-slate-300">Parcelado</label>
+                    </div>
+                </div>
+
+                {isInstallment && (
+                     <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Número de Parcelas</label>
+                        <input type="number" min="2" max="48" value={installments} onChange={(e) => setInstallments(parseInt(e.target.value))} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" />
+                        <p className="text-xs text-slate-500 mt-1">Valor da parcela: {formatCurrency(parseCurrencyInput(amount) / installments, false)}</p>
+                    </div>
+                )}
+
+                <button type="submit" className="w-full bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-4">
+                    {expenseToEdit ? 'Salvar Alterações' : 'Adicionar Despesa'}
                 </button>
             </form>
         </Modal>
     );
 };
 
-interface JarModalProps {
+const JarModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
     onAddJar: (jar: Omit<SavingsJar, 'id'>) => void;
-}
-
-const JarModal: React.FC<JarModalProps> = ({ isOpen, onClose, onAddJar }) => {
+}> = ({ isOpen, onClose, onAddJar }) => {
     const [name, setName] = useState('');
-    const [percentage, setPercentage] = useState('');
+    const [percentage, setPercentage] = useState(10);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name || !percentage) return;
-        
-        onAddJar({ name, percentage: parseFloat(percentage) });
+        if (!name) return;
+        onAddJar({ name, percentage });
         setName('');
-        setPercentage('');
+        setPercentage(10);
+        onClose();
     };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Nova Caixinha">
-            <form onSubmit={handleSubmit} className="space-y-4">
+             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block mb-1 text-slate-300">Nome da Caixinha</label>
-                    <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="Ex: Viagem, Reserva de Emergência" required />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Nome da Caixinha</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" placeholder="Ex: Viagem, Reserva de Emergência..." required />
                 </div>
-                <div>
-                    <label className="block mb-1 text-slate-300">Porcentagem Inicial (%)</label>
-                    <input type="number" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} className="w-full bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white" placeholder="0" required />
+                 <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Porcentagem Inicial (%)</label>
+                    <input type="number" min="1" max="100" value={percentage} onChange={(e) => setPercentage(parseInt(e.target.value))} className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" required />
                 </div>
-                <button type="submit" className="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors mt-6">
+                <button type="submit" className="w-full bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-4">
                     Criar Caixinha
                 </button>
             </form>
@@ -2318,66 +2281,58 @@ const JarModal: React.FC<JarModalProps> = ({ isOpen, onClose, onAddJar }) => {
     );
 };
 
-interface AnticipateInstallmentModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  expense: Expense | null;
-  onConfirm: (expenseId: string, count: number) => void;
-  displayedDate: Date;
-  isCensored: boolean;
-}
-
-const AnticipateInstallmentModal: React.FC<AnticipateInstallmentModalProps> = ({ isOpen, onClose, expense, onConfirm, displayedDate, isCensored }) => {
+const AnticipateInstallmentModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    expense: Expense | null;
+    onConfirm: (expenseId: string, count: number) => void;
+    displayedDate: Date;
+    isCensored: boolean;
+}> = ({ isOpen, onClose, expense, onConfirm, displayedDate, isCensored }) => {
     const [count, setCount] = useState(1);
     
     if (!isOpen || !expense || !expense.installments) return null;
 
-    const installmentAmount = expense.amount / expense.installments.total;
-    const totalValue = count * installmentAmount;
-
-    const handleSubmit = () => {
-        onConfirm(expense.id, count);
-        onClose();
-        setCount(1);
-    };
+    // Calculate remaining installments from displayed date onwards?
+    // Or just generic anticipation. The logic in App.tsx handles reducing total.
+    // Usually users want to anticipate X installments from the end or next X.
+    // Simple logic: "How many installments do you want to anticipate?"
+    
+    const installmentValue = expense.amount / expense.installments.total;
 
     return (
-         <Modal isOpen={isOpen} onClose={onClose} title="Antecipar Parcelas">
+        <Modal isOpen={isOpen} onClose={onClose} title="Antecipar Parcelas">
              <div className="space-y-4">
-                <p className="text-slate-300">Quantas parcelas de <span className="font-bold text-white">{expense.description}</span> você deseja antecipar?</p>
+                <p className="text-slate-300">
+                    Deseja antecipar parcelas para <strong>{expense.description}</strong>?
+                </p>
+                <div className="bg-dark-700 p-3 rounded border border-dark-600">
+                     <p className="text-sm text-slate-400">Valor da Parcela: <span className="text-slate-200 font-bold">{formatCurrency(installmentValue, isCensored)}</span></p>
+                </div>
                 
-                <div className="flex items-center gap-4">
-                    <label className="text-slate-400">Número de parcelas:</label>
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Número de parcelas a antecipar</label>
                     <input 
                         type="number" 
                         min="1" 
                         max={expense.installments.total} 
                         value={count} 
-                        onChange={e => setCount(Math.min(parseInt(e.target.value) || 1, expense.installments!.total))}
-                        className="w-20 bg-dark-700 p-2 rounded border border-dark-600 focus:outline-none focus:ring-2 focus:ring-accent text-white text-center"
+                        onChange={(e) => setCount(parseInt(e.target.value))} 
+                        className="w-full bg-dark-700 rounded border border-dark-600 p-2 text-white focus:border-accent focus:outline-none" 
                     />
                 </div>
                 
-                <div className="bg-dark-700 p-4 rounded-lg">
-                     <div className="flex justify-between items-center mb-2">
-                        <span className="text-slate-400">Valor da Parcela:</span>
-                        <span className="font-semibold">{formatCurrency(installmentAmount, isCensored)}</span>
-                     </div>
-                     <div className="flex justify-between items-center text-lg border-t border-dark-600 pt-2">
-                        <span className="text-slate-200 font-bold">Total a pagar agora:</span>
-                        <span className="font-bold text-accent">{formatCurrency(totalValue, isCensored)}</span>
-                     </div>
+                <div className="p-3 bg-blue-900/20 rounded border border-blue-800/50">
+                    <p className="text-blue-300 text-sm">Total a pagar agora: <span className="font-bold text-lg block">{formatCurrency(count * installmentValue, isCensored)}</span></p>
                 </div>
 
-                <div className="flex gap-4 mt-6">
-                    <button onClick={onClose} className="flex-1 bg-dark-600 hover:bg-dark-500 text-slate-300 font-bold py-2 px-4 rounded-lg transition-colors">
-                        Cancelar
-                    </button>
-                    <button onClick={handleSubmit} className="flex-1 bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                        Confirmar
-                    </button>
-                </div>
-             </div>
-         </Modal>
+                <button 
+                    onClick={() => onConfirm(expense.id, count)}
+                    className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-4"
+                >
+                    Confirmar Antecipação
+                </button>
+            </div>
+        </Modal>
     );
 };
