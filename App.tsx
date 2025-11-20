@@ -731,7 +731,6 @@ export default function App() {
                 income={totalIncome} 
                 expenses={displayedMonthExpenses} 
                 surplus={surplus} 
-                monthlyExpensesList={displayedMonthExpensesList}
                 isCensored={isCensored}
             />
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -1552,183 +1551,7 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
     );
 };
 
-// Helper functions for SVG Arc
-const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
-    const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
-    return {
-        x: centerX + (radius * Math.cos(angleInRadians)),
-        y: centerY + (radius * Math.sin(angleInRadians))
-    };
-};
-
-const describeDonutArc = (x: number, y: number, outerRadius: number, innerRadius: number, startAngle: number, endAngle: number) => {
-    if (endAngle - startAngle >= 360) {
-      endAngle = 359.99;
-    }
-    const start = polarToCartesian(x, y, outerRadius, endAngle);
-    const end = polarToCartesian(x, y, outerRadius, startAngle);
-    
-    const startInner = polarToCartesian(x, y, innerRadius, endAngle);
-    const endInner = polarToCartesian(x, y, innerRadius, startAngle);
-
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-
-    const d = [
-        "M", start.x, start.y,
-        "A", outerRadius, outerRadius, 0, largeArcFlag, 0, end.x, end.y,
-        "L", endInner.x, endInner.y,
-        "A", innerRadius, innerRadius, 0, largeArcFlag, 1, startInner.x, startInner.y,
-        "Z"
-    ].join(" ");
-
-    return d;
-};
-
-const ExpenseCategoryChart: React.FC<{ expenses: Expense[]; totalExpenses: number; isCensored: boolean }> = ({ expenses, totalExpenses, isCensored }) => {
-    const [activeSlice, setActiveSlice] = useState<string | null>(null);
-    const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
-
-    const COLORS = ['#3b82f6', '#16a34a', '#facc15', '#ef4444', '#8b5cf6', '#ec4899', '#10b981', '#f97316', '#64748b'];
-
-    const categoryData = useMemo(() => {
-        if (!expenses || expenses.length === 0 || totalExpenses <= 0) return [];
-        
-        const expensesByCategory = expenses.reduce((acc, expense) => {
-            const category = expense.category || 'Outros';
-            const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
-            acc[category] = (acc[category] || 0) + amount;
-            return acc;
-        }, {} as Record<string, number>);
-        
-        return Object.entries(expensesByCategory)
-            .map(([name, value], index) => ({ name, value, color: COLORS[index % COLORS.length] }))
-            .sort((a, b) => b.value - a.value);
-    }, [expenses, totalExpenses]);
-
-    const expensesBySubcategory = useMemo(() => {
-        const result: Record<string, { name: string; value: number }[]> = {};
-        categoryData.forEach(cat => {
-          const subcategories = expenses
-            .filter(e => e.category === cat.name)
-            .reduce((acc, expense) => {
-              const subcatName = expense.subcategory || 'Outros';
-              const amount = expense.installments ? expense.amount / expense.installments.total : expense.amount;
-              acc[subcatName] = (acc[subcatName] || 0) + amount;
-              return acc;
-            }, {} as Record<string, number>);
-            
-          result[cat.name] = Object.entries(subcategories)
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value);
-        });
-        return result;
-    }, [expenses, categoryData]);
-
-    const handleToggleCategory = (categoryName: string) => {
-      setExpandedCategories(prev => 
-        prev.includes(categoryName) 
-          ? prev.filter(c => c !== categoryName)
-          : [...prev, categoryName]
-      );
-    };
-
-    let cumulativeAngle = 0;
-
-    return (
-        <div className="w-full">
-            <h3 className="text-lg font-semibold text-slate-300 mb-6 text-center">Gastos por Categoria</h3>
-            {categoryData.length === 0 ? (
-                <p className="text-slate-500 text-center py-8">Nenhum gasto para exibir.</p>
-            ) : (
-                <div className="flex flex-col sm:flex-row gap-6 items-center">
-                    <div className="relative w-40 h-40 mx-auto flex-shrink-0">
-                        <svg viewBox="0 0 200 200">
-                            {categoryData.map((slice) => {
-                                const percentage = (slice.value / totalExpenses) * 100;
-                                const startAngle = cumulativeAngle;
-                                const endAngle = cumulativeAngle + (percentage / 100) * 360;
-                                const pathData = describeDonutArc(100, 100, 100, 70, startAngle, endAngle);
-                                cumulativeAngle = endAngle;
-
-                                const isSliceActive = activeSlice === slice.name;
-
-                                return (
-                                    <g 
-                                        key={slice.name} 
-                                        onMouseEnter={() => setActiveSlice(slice.name)}
-                                        onMouseLeave={() => setActiveSlice(null)}
-                                    >
-                                        <path 
-                                            d={pathData} 
-                                            fill={slice.color} 
-                                            className="transition-transform duration-200"
-                                            style={{ transform: isSliceActive ? 'scale(1.05)' : 'scale(1)', transformOrigin: 'center center' }}
-                                        />
-                                    </g>
-                                );
-                            })}
-                        </svg>
-                        {activeSlice ? (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                                <p className="text-sm text-slate-300 break-words px-2">{activeSlice}</p>
-                                <p className="font-bold text-lg text-white">
-                                    {formatCurrency(categoryData.find(d => d.name === activeSlice)?.value || 0, isCensored)}
-                                </p>
-                            </div>
-                        ) : (
-                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                                <p className="text-sm text-slate-400">Passe o mouse</p>
-                                <p className="text-sm text-slate-400">para ver</p>
-                            </div>
-                        )}
-                    </div>
-                    <ul className="w-full space-y-1 text-sm self-center sm:self-start max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                        {categoryData.map(slice => {
-                             const isExpanded = expandedCategories.includes(slice.name);
-                             const subcategories = expensesBySubcategory[slice.name] || [];
-                             const hasSubcategories = subcategories.length > 1 || (subcategories.length === 1 && subcategories[0].name !== 'Outros');
-                            return (
-                                <React.Fragment key={slice.name}>
-                                    <li
-                                        className="flex items-center justify-between gap-2 p-1 rounded transition-colors"
-                                        style={{ backgroundColor: activeSlice === slice.name ? 'rgba(255, 255, 255, 0.05)' : 'transparent', cursor: hasSubcategories ? 'pointer' : 'default' }}
-                                        onMouseEnter={() => setActiveSlice(slice.name)}
-                                        onMouseLeave={() => setActiveSlice(null)}
-                                        onClick={() => hasSubcategories && handleToggleCategory(slice.name)}
-                                    >
-                                    <div className="flex items-center gap-2 truncate">
-                                        <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: slice.color }}></div>
-                                        <span className="truncate">{slice.name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold">{((slice.value / totalExpenses) * 100).toFixed(1)}%</span>
-                                        {hasSubcategories && (
-                                            <ChevronDownIcon className={`h-4 w-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                        )}
-                                    </div>
-                                    </li>
-                                     {isExpanded && hasSubcategories && (
-                                      <ul className="pl-8 pr-2 pt-1 pb-2 space-y-1 text-xs">
-                                        {subcategories.map(sub => (
-                                          <li key={sub.name} className="flex justify-between items-center text-slate-400">
-                                            <span>- {sub.name}</span>
-                                            <span className="font-medium">{formatCurrency(sub.value, isCensored)}</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                </React.Fragment>
-                            )
-                        })}
-                    </ul>
-                </div>
-            )}
-        </div>
-    );
-};
-
-
-const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; monthlyExpensesList: Expense[]; isCensored: boolean }> = ({ income, expenses, surplus, monthlyExpensesList, isCensored }) => {
+const FinancialChart: React.FC<{ income: number; expenses: number; surplus: number; isCensored: boolean }> = ({ income, expenses, surplus, isCensored }) => {
     if (income <= 0) {
         return (
             <div className="bg-dark-800 p-6 rounded-xl shadow-lg mt-8 text-center">
@@ -1750,10 +1573,9 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
         <div className="bg-dark-800 rounded-xl shadow-lg mt-8">
             <div className="p-6 sm:p-8">
                 <h2 className="text-2xl font-bold text-slate-100 mb-8 text-center">Visão Geral do Mês</h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
+                <div className="flex justify-center">
                     {/* Overall Summary Section */}
-                    <div className="bg-dark-900/50 rounded-xl p-6 border border-dark-700 flex flex-col items-center justify-center">
+                    <div className="bg-dark-900/50 rounded-xl p-6 border border-dark-700 flex flex-col items-center justify-center max-w-lg w-full">
                         <h3 className="text-lg font-semibold text-slate-300 mb-6">Balanço</h3>
                         <div className="relative w-48 h-48 sm:w-52 sm:h-52 mb-6">
                              <svg className="w-full h-full" viewBox="0 0 200 200">
@@ -1795,11 +1617,6 @@ const FinancialChart: React.FC<{ income: number; expenses: number; surplus: numb
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    {/* Expenses Breakdown Section */}
-                    <div className="bg-dark-900/50 rounded-xl p-6 border border-dark-700 flex flex-col justify-center">
-                         <ExpenseCategoryChart expenses={monthlyExpensesList} totalExpenses={expenses} isCensored={isCensored} />
                     </div>
                 </div>
             </div>
