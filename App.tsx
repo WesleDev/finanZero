@@ -161,6 +161,7 @@ const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): numbe
       if (expense.isRecurring) {
         const effectiveStartDate = new Date(expense.date + 'T00:00:00');
         if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveStartDate.setDate(1); // Set to 1st of month to avoid overflow (e.g. Jan 30 -> Feb 30 -> Mar 2)
             effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
         }
         const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
@@ -172,6 +173,7 @@ const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): numbe
         const effectiveStartDate = new Date(expense.date + 'T00:00:00');
         const firstPaymentDate = new Date(effectiveStartDate);
          if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+            firstPaymentDate.setDate(1); // Set to 1st of month to avoid overflow
             firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
         }
         
@@ -188,6 +190,7 @@ const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): numbe
       } else { // One-time expense
         const effectiveDate = new Date(expense.date + 'T00:00:00');
         if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+            effectiveDate.setDate(1); // Set to 1st of month to avoid overflow
             effectiveDate.setMonth(effectiveDate.getMonth() + 1);
         }
         const effectiveMonthYear = getMonthYear(effectiveDate);
@@ -367,6 +370,7 @@ export default function App() {
       if (expense.isRecurring) {
           const effectiveStartDate = new Date(expense.date + 'T00:00:00');
           if (expense.category === 'Cartão de Crédito' && effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+              effectiveStartDate.setDate(1); // Set to 1st of month
               effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
           }
           const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
@@ -377,6 +381,7 @@ export default function App() {
           const effectiveStartDate = new Date(expense.date + 'T00:00:00');
           const firstPaymentDate = new Date(effectiveStartDate);
           if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+              firstPaymentDate.setDate(1); // Set to 1st of month
               firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
           }
           for (let i = 0; i < expense.installments.total; i++) {
@@ -393,6 +398,7 @@ export default function App() {
       
       const effectiveDate = new Date(expense.date + 'T00:00:00');
       if (expense.category === 'Cartão de Crédito' && effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+          effectiveDate.setDate(1); // Set to 1st of month
           effectiveDate.setMonth(effectiveDate.getMonth() + 1);
       }
       const effectiveMonthYear = getMonthYear(effectiveDate);
@@ -1486,6 +1492,7 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
             if (expense.isRecurring) {
                 const effectiveStartDate = new Date(expense.date + 'T00:00:00');
                 if (effectiveStartDate.getDate() >= CARD_CLOSING_DAY) {
+                    effectiveStartDate.setDate(1); // Set to 1st of month
                     effectiveStartDate.setMonth(effectiveStartDate.getMonth() + 1);
                 }
                 const effectiveStartMonthYear = getMonthYear(effectiveStartDate);
@@ -1496,6 +1503,7 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
                 const installmentAmount = expense.amount / expense.installments.total;
                 const firstPaymentDate = new Date(expense.date + 'T00:00:00');
                 if (firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+                    firstPaymentDate.setDate(1); // Set to 1st of month
                     firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
                 }
 
@@ -1515,6 +1523,7 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
             } else { // one-time
                 const effectiveDate = new Date(expense.date + 'T00:00:00');
                 if (effectiveDate.getDate() >= CARD_CLOSING_DAY) {
+                    effectiveDate.setDate(1); // Set to 1st of month
                     effectiveDate.setMonth(effectiveDate.getMonth() + 1);
                 }
                 if (getMonthYear(effectiveDate) === displayedMonthKey) {
