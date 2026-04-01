@@ -153,9 +153,21 @@ const getBillingDayInMonth = (expenseDate: string, displayedDate: Date): Date =>
     return new Date(year, month, billingDay);
 };
 
+const applyDateRule = <T extends { date: string, category: string }>(expense: T): T => {
+  if (expense.category !== 'Cartão de Crédito') {
+    return expense;
+  }
+  const [year, month, day] = expense.date.split('-');
+  const dayNum = parseInt(day, 10);
+  if (dayNum >= 1 && dayNum <= 15) {
+    return { ...expense, date: `${year}-${month}-15` };
+  }
+  return expense;
+};
+
 const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): number => {
     const targetMonthYear = getMonthYear(date);
-    const CARD_CLOSING_DAY = 15;
+    const CARD_CLOSING_DAY = 16;
 
     return expenses.reduce((total, expense) => {
       if (expense.isRecurring) {
@@ -364,7 +376,7 @@ export default function App() {
 
   const displayedMonthExpensesList = useMemo(() => {
     const displayedMonthKey = getMonthYear(displayedDate);
-    const CARD_CLOSING_DAY = 15;
+    const CARD_CLOSING_DAY = 16;
     
     return expenses.filter(expense => {
       if (expense.isRecurring) {
@@ -491,14 +503,16 @@ export default function App() {
   }, [categoryThresholds, addNotification]);
 
   const addExpense = (expense: Omit<Expense, 'id'>) => {
-    checkExpenseThreshold(expense);
-    setExpenses([...expenses, { ...expense, id: Date.now().toString() }]);
+    const processedExpense = applyDateRule(expense);
+    checkExpenseThreshold(processedExpense);
+    setExpenses([...expenses, { ...processedExpense, id: Date.now().toString() }]);
     setExpenseModalOpen(false);
   };
 
   const updateExpense = (updatedExpense: Expense) => {
-    checkExpenseThreshold(updatedExpense);
-    setExpenses(expenses.map(e => (e.id === updatedExpense.id ? updatedExpense : e)));
+    const processedExpense = applyDateRule(updatedExpense);
+    checkExpenseThreshold(processedExpense);
+    setExpenses(expenses.map(e => (e.id === processedExpense.id ? processedExpense : e)));
     setExpenseModalOpen(false);
     setEditingExpense(null);
   };
@@ -576,7 +590,8 @@ export default function App() {
           });
       }
       
-      updatedExpenses.push({ ...newExpense, id: Date.now().toString() });
+      const processedNewExpense = applyDateRule(newExpense as any);
+      updatedExpenses.push({ ...processedNewExpense, id: Date.now().toString() });
 
       setExpenses(updatedExpenses);
       addNotification(`Antecipação de ${countToAnticipate} parcela(s) de "${expenseToModify.description}" realizada.`, 'success');
@@ -1486,7 +1501,7 @@ const MonthlyAlert: React.FC<{ current: number; previous: number; isCensored: bo
 };
 
 const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, isCensored: boolean }> = ({ expenses, displayedDate, isCensored }) => {
-    const CARD_CLOSING_DAY = 15;
+    const CARD_CLOSING_DAY = 16;
 
     const { currentBill, futureDebt } = useMemo(() => {
         const creditCardExpenses = expenses.filter(e => e.category === 'Cartão de Crédito');
