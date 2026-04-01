@@ -165,6 +165,30 @@ const applyDateRule = <T extends { date: string, category: string }>(expense: T)
   return expense;
 };
 
+const getCurrentInstallmentNumber = (expense: Expense, displayedDate: Date): number | null => {
+    if (!expense.installments) return null;
+    const displayedMonthKey = getMonthYear(displayedDate);
+    const CARD_CLOSING_DAY = 16;
+    
+    const effectiveStartDate = new Date(expense.date + 'T00:00:00');
+    const firstPaymentDate = new Date(effectiveStartDate);
+    if (expense.category === 'Cartão de Crédito' && firstPaymentDate.getDate() >= CARD_CLOSING_DAY) {
+        firstPaymentDate.setDate(1);
+        firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+    }
+    
+    for (let i = 0; i < expense.installments.total; i++) {
+        const installmentDate = new Date(firstPaymentDate.getFullYear(), firstPaymentDate.getMonth() + i, 1);
+        const daysInMonth = new Date(installmentDate.getFullYear(), installmentDate.getMonth() + 1, 0).getDate();
+        installmentDate.setDate(Math.min(firstPaymentDate.getDate(), daysInMonth));
+
+        if (getMonthYear(installmentDate) === displayedMonthKey) {
+            return i + 1;
+        }
+    }
+    return null;
+};
+
 const calculateMonthlyExpensesForDate = (expenses: Expense[], date: Date): number => {
     const targetMonthYear = getMonthYear(date);
     const CARD_CLOSING_DAY = 16;
@@ -1844,7 +1868,13 @@ const ExpenseManager: React.FC<{
                         
                         let installmentLabel = "";
                         if (isInstallment) {
-                             installmentLabel = `${expense.installments!.total}x`;
+                             const currentInstallment = getCurrentInstallmentNumber(expense, displayedDate);
+                             if (currentInstallment) {
+                                 const remaining = expense.installments!.total - currentInstallment;
+                                 installmentLabel = `${currentInstallment}/${expense.installments!.total} (Faltam ${remaining})`;
+                             } else {
+                                 installmentLabel = `${expense.installments!.total}x`;
+                             }
                         }
 
                         return (
