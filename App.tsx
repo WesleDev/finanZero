@@ -414,6 +414,13 @@ export default function App() {
                            (recurringFilter === 'yes' && expense.isRecurring) ||
                            (recurringFilter === 'no' && !expense.isRecurring && !expense.installments);
       return categoryMatch && subcategoryMatch && recurringMatch;
+    }).sort((a, b) => {
+      const dateA = new Date(a.date + 'T00:00:00');
+      const dateB = new Date(b.date + 'T00:00:00');
+      if (dateA.getDate() !== dateB.getDate()) {
+        return dateA.getDate() - dateB.getDate();
+      }
+      return dateA.getTime() - dateB.getTime();
     });
   }, [displayedMonthExpensesList, categoryFilter, subcategoryFilter, recurringFilter]);
 
