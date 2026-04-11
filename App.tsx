@@ -1867,23 +1867,29 @@ const ExpenseManager: React.FC<{
                         const displayAmount = isInstallment ? (expense.amount / expense.installments!.total) : expense.amount;
                         
                         let installmentLabel = "";
+                        let isLastInstallment = false;
                         if (isInstallment) {
                              const currentInstallment = getCurrentInstallmentNumber(expense, displayedDate);
                              if (currentInstallment) {
                                  const remaining = expense.installments!.total - currentInstallment;
-                                 installmentLabel = `${currentInstallment}/${expense.installments!.total} (Faltam ${remaining})`;
+                                 if (remaining === 0) {
+                                     isLastInstallment = true;
+                                     installmentLabel = `${currentInstallment}/${expense.installments!.total} (Última parcela)`;
+                                 } else {
+                                     installmentLabel = `${currentInstallment}/${expense.installments!.total} (Faltam ${remaining})`;
+                                 }
                              } else {
                                  installmentLabel = `${expense.installments!.total}x`;
                              }
                         }
 
                         return (
-                        <div key={expense.id} className="bg-dark-700 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-dark-600 transition-colors border-l-4 border-red-500">
+                        <div key={expense.id} className={`bg-dark-700 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-dark-600 transition-colors border-l-4 ${isLastInstallment ? 'border-emerald-500 bg-dark-600/30' : 'border-red-500'}`}>
                             <div className="flex-grow">
                                 <div className="flex items-center gap-2 mb-1">
                                     <h3 className="font-bold text-slate-200">{expense.description}</h3>
                                     {expense.isRecurring && <div title="Despesa Recorrente"><RecurringIcon /></div>}
-                                    {isInstallment && <span className="text-xs bg-dark-900 text-slate-400 px-2 py-0.5 rounded-full border border-dark-600">{installmentLabel}</span>}
+                                    {isInstallment && <span className={`text-xs px-2 py-0.5 rounded-full border ${isLastInstallment ? 'bg-emerald-900/40 text-emerald-400 border-emerald-700/50' : 'bg-dark-900 text-slate-400 border-dark-600'}`}>{installmentLabel}</span>}
                                 </div>
                                 <div className="flex flex-wrap gap-2 text-xs text-slate-400">
                                     <span className="bg-dark-800 px-2 py-1 rounded">{expense.category}</span>
