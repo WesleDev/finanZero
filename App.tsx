@@ -1581,7 +1581,13 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
         return { currentBill: bill, futureDebt: future };
     }, [expenses, displayedDate]);
 
-    const totalDebt = currentBill + futureDebt;
+    const isCurrentBillPaid = useMemo(() => {
+        const today = new Date();
+        const billingDeadline = new Date(displayedDate.getFullYear(), displayedDate.getMonth(), 15, 23, 59, 59);
+        return today.getTime() > billingDeadline.getTime();
+    }, [displayedDate]);
+
+    const totalDebt = isCurrentBillPaid ? futureDebt : currentBill + futureDebt;
 
     return (
         <div className="bg-dark-800 p-6 rounded-xl shadow-lg">
@@ -1590,8 +1596,13 @@ const CreditCardSummary: React.FC<{ expenses: Expense[], displayedDate: Date, is
             </div>
             <div className="space-y-1 mt-2">
                 <div className="flex justify-between items-baseline">
-                    <span className="text-sm text-slate-400">Fatura Atual</span>
-                    <span className="font-bold text-lg text-amber-400">{formatCurrency(currentBill, isCensored)}</span>
+                    <span className="text-sm text-slate-400">
+                        Fatura Atual
+                        {isCurrentBillPaid && <span className="text-emerald-400 font-bold text-xs ml-1">(Paga)</span>}
+                    </span>
+                    <span className={`font-bold text-lg ${isCurrentBillPaid ? 'text-emerald-500/70 line-through' : 'text-amber-400'}`}>
+                        {formatCurrency(currentBill, isCensored)}
+                    </span>
                 </div>
                 <div className="flex justify-between items-baseline">
                     <span className="text-sm text-slate-400">Dívida Futura</span>
